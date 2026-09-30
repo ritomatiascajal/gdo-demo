@@ -222,17 +222,48 @@
     if (interno()) cargarDetalle(o);
   }
 
+  const puedeValidar = () => ['Secretario de Obras Públicas', 'Jefe de Servicios Públicos'].includes(st.rol);
+
   async function cargarDetalle(o) {
-    const [it, ce] = await Promise.all([
+    const [it, ce, pe, fo] = await Promise.all([
       sb.from('v_items').select('nro_item,descripcion,unidad,cantidad,subtotal,incidencia,avance_item').eq('id_obra', o.id_obra).order('nro_item'),
       o.modalidad === 'Contrato'
         ? sb.from('v_certificados').select('nro_certificado,periodo,estado,monto_bruto,monto_neto,control_respaldo').eq('id_obra', o.id_obra).order('nro_certificado')
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+      sb.from('v_mediciones').select('id_medicion,periodo,fecha,item_descripcion,unidad,cantidad_periodo,monto,inspector_id,observaciones')
+        .eq('id_obra', o.id_obra).eq('estado_validacion', 'Pendiente').order('fecha', { ascending: false }),
+      sb.from('v_fotos').select('id_foto,id_medicion,archivo,fecha_hora,distancia_obra_m,control_ubicacion')
+        .eq('id_obra', o.id_obra).order('fecha_hora', { ascending: false }).limit(30)
     ]);
     const cont = $('ficha-detalle');
     if (!cont || st.activa !== o.id_obra) return;
-    if (it.error || ce.error) { cont.innerHTML = `<p class="estado-carga">Error: ${esc((it.error || ce.error).message)}</p>`; return; }
-    let h = `<h3>Ítems (${it.data.length})</h3><table class="t"><thead><tr><th>#</th><th>Ítem</th><th class="n">Incid.</th><th class="n">Avance</th></tr></thead><tbody>` +
+    const err = it.error || ce.error || pe.error || fo.error;
+    if (err) { cont.innerHTML = `<p class="estado-carga">Error: ${esc(err.message)}</p>`; return; }
+
+    // Fotos con archivo real en el almacenamiento (las del Excel de ejemplo no tienen archivo)
+    let fotos = [];
+    if (fo.data.length) {
+      const r = await sb.storage.from('fotos').createSignedUrls(fo.data.map((f) => f.archivo), 3600);
+      const urls = Object.fromEntries((r.data || []).filter((x) => x.signedUrl).map((x) => [x.path, x.signedUrl]));
+      fotos = fo.data.filter((f) => urls[f.archivo]).map((f) => ({ ...f, url: urls[f.archivo] }));
+    }
+    const fotosDe = (idMed) => fotos.filter((f) => f.id_medicion === idMed);
+    const mini = (f) => `<a href="${f.url}" target="_blank" rel="noopener" class="mini${f.control_ubicacion === 'REVISAR' ? ' revisar' : ''}"
+        title="${esc(new Date(f.fecha_hora).toLocaleString('es-AR'))}${f.distancia_obra_m != null ? ' · a ' + f.distancia_obra_m + ' m de la obra' : ' · sin GPS'}">
+        <img src="${f.url}" alt="Foto ${esc(f.id_foto)}" loading="lazy">${f.control_ubicacion === 'REVISAR' ? '<span>lejos</span>' : ''}</a>`;
+
+    let h = '';
+    if (pe.data.length) {
+      h += `<h3>Mediciones a validar (${pe.data.length})</h3>` + pe.data.map((m) => `
+        <div class="pend" data-med="${esc(m.id_medicion)}">
+          <div class="pend-cab"><strong>${esc(m.item_descripcion)}</strong><span class="num">${pesos(m.monto)}</span></div>
+          <div class="pend-sub">${esc(m.id_medicion)} · ${esc(m.periodo)} · ${fecha(m.fecha)} · <span class="num">${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${esc(m.unidad)}</span> · ${esc(st.usuarios[m.inspector_id] || m.inspector_id)}</div>
+          ${m.observaciones ? `<div class="pend-sub">“${esc(m.observaciones)}”</div>` : ''}
+          ${fotosDe(m.id_medicion).length ? `<div class="minis">${fotosDe(m.id_medicion).map(mini).join('')}</div>` : '<div class="pend-sub" style="color:var(--rojo)">Sin foto cargada</div>'}
+          ${puedeValidar() ? `<div class="pend-acc"><button class="btn-v ok" data-acc="Aprobada">Aprobar</button><button class="btn-v obs" data-acc="Observada">Observar</button></div>` : ''}
+        </div>`).join('');
+    }
+    h += `<h3>Ítems (${it.data.length})</h3><table class="t"><thead><tr><th>#</th><th>Ítem</th><th class="n">Incid.</th><th class="n">Avance</th></tr></thead><tbody>` +
       it.data.map((i) => `<tr><td>${i.nro_item}</td><td>${esc(i.descripcion)}<br><small>${Number(i.cantidad).toLocaleString('es-AR')} ${esc(i.unidad)}</small></td>
         <td class="n">${pct(i.incidencia)}</td><td class="n">${pct(i.avance_item)}</td></tr>`).join('') + '</tbody></table>';
     if (ce.data.length) {
@@ -243,7 +274,29 @@
     } else if (o.modalidad === 'Administración') {
       h += `<p class="estado-carga">Obra por administración: se sigue por mediciones, fotos y partes diarios.</p>`;
     }
+    const conGps = fo.data.filter((f) => f.control_ubicacion === 'REVISAR').length;
+    h += `<h3>Fotos (${fo.data.length} registradas${conGps ? `, ${conGps} a revisar por ubicación` : ''})</h3>` +
+      (fotos.length ? `<div class="minis grande">${fotos.map(mini).join('')}</div>`
+        : '<p class="estado-carga">Las fotos de los datos de ejemplo no tienen imagen. Las que cargue el inspector desde la app aparecen acá.</p>');
     cont.innerHTML = h;
+
+    cont.querySelectorAll('.pend-acc button').forEach((b) => b.addEventListener('click', () =>
+      validar(o, b.closest('.pend').dataset.med, b.dataset.acc, b)));
+  }
+
+  async function validar(o, idMed, estado, btn) {
+    let obs = null;
+    if (estado === 'Observada') {
+      obs = prompt('Motivo de la observación (lo ve el inspector):');
+      if (obs === null) return;
+    }
+    btn.closest('.pend-acc').querySelectorAll('button').forEach((x) => { x.disabled = true; });
+    const cambios = { estado_validacion: estado, validado_por: st.idUsuario };
+    if (obs) cambios.observaciones = obs;
+    const { error } = await sb.from('mediciones').update(cambios).eq('id_medicion', idMed);
+    if (error) { alert('No se pudo guardar: ' + error.message); btn.closest('.pend-acc').querySelectorAll('button').forEach((x) => { x.disabled = false; }); return; }
+    await cargar();               // recalcula avance, semáforo e indicadores
+    abrirFicha(o.id_obra, false); // reabre la ficha actualizada
   }
 
   function cerrarFicha() {
@@ -269,6 +322,7 @@
     } else {
       $('subtitulo').textContent = `${cfg.municipio} · Visor público`;
     }
+    $('link-inspector').hidden = st.rol !== 'Inspector de obra';
     info.hidden = !session;
     $('btn-login').hidden = !!session;
     $('btn-logout').hidden = !session;

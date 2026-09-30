@@ -109,6 +109,25 @@ table.t td.n, table.t th.n { text-align: right; font-family: 'IBM Plex Mono', mo
 .aviso { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; background: #fdf3e1; margin: 8px 0; }
 .aviso.rojo { background: #fbe9e7; }
 
+a.btn { text-decoration: none; }
+/* Validación y fotos */
+.pend { border: 1px solid #f0d9a8; background: #fffaf0; border-radius: 6px; padding: 9px 10px; margin-bottom: 8px; font-size: 13px; }
+.pend-cab { display: flex; justify-content: space-between; gap: 8px; }
+.pend-sub { font-size: 12px; color: var(--tinta-2); margin-top: 3px; }
+.pend-acc { display: flex; gap: 8px; margin-top: 8px; }
+.btn-v { flex: 1; font: inherit; font-size: 13px; font-weight: 500; border-radius: 6px; padding: 7px; cursor: pointer; border: 1px solid; background: #fff; }
+.btn-v.ok { color: var(--verde); border-color: var(--verde); }
+.btn-v.ok:hover { background: var(--verde); color: #fff; }
+.btn-v.obs { color: var(--rojo); border-color: var(--rojo); }
+.btn-v.obs:hover { background: var(--rojo); color: #fff; }
+.btn-v:disabled { opacity: .5; cursor: default; }
+.minis { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.mini { position: relative; display: block; width: 64px; height: 64px; border-radius: 6px; overflow: hidden; border: 2px solid transparent; }
+.minis.grande .mini { width: 84px; height: 84px; }
+.mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mini.revisar { border-color: var(--amarillo); }
+.mini span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; text-align: center; background: var(--amarillo); color: #fff; }
+
 /* Login */
 dialog { border: 0; border-radius: var(--radio); box-shadow: var(--sombra); padding: 20px; width: min(360px, 92vw); }
 dialog::backdrop { background: rgba(20,24,28,.45); }

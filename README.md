@@ -15,11 +15,18 @@ certificados, y visor público para vecinos.
 - Sin ingresar: visor público (obras publicadas, estado y avance, sin montos de certificados).
 - Ingresando con un usuario municipal: tablero con semáforo, indicadores, ítems y certificados de cada obra.
 
+## App del inspector
+`inspector.html` (se instala en el celular desde el navegador: menú ⋮ → "Agregar a la pantalla principal").
+Ingresa solo el rol Inspector de obra. Flujo: mis obras → ítem → cantidad + fotos con GPS → queda Pendiente.
+Las fotos se achican a 1600 px y se guardan en el bucket privado `fotos`; la app avisa si la foto se toma a más
+de `radio_foto_m` metros de la obra. El Secretario / Jefe de SSPP las ve y aprueba u observa desde la ficha del tablero.
+
 La configuración (URL del proyecto y clave publicable de Supabase) está en `js/config.js`.
 
 ## Estructura
 ```
-index.html, js/, css/   visor web
+index.html, js/, css/   visor web y tablero
+inspector.html          app del inspector (manifest.json + sw.js la hacen instalable)
 sql/
   01_esquema.sql        tablas, restricciones y vistas calculadas (avance, desvío, semáforo…)
   02_datos_ejemplo.sql  datos del Excel modelo (16 obras, 68 ítems, 193 mediciones, 88 fotos, 31 certificados)

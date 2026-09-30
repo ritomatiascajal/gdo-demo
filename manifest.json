@@ -1,0 +1,16 @@
+{
+  "name": "Inspector de obra — Frías",
+  "short_name": "Inspector",
+  "description": "Carga de avances de obra con foto y GPS",
+  "start_url": "inspector.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f3ef",
+  "theme_color": "#1f4e79",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "img/icono-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
