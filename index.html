@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Obras Municipales — Frías</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <span class="logo" aria-hidden="true">▦</span>
+      <div>
+        <h1>Obras Municipales</h1>
+        <p id="subtitulo">Municipalidad de Frías · Visor público</p>
+      </div>
+    </div>
+    <div class="sesion">
+      <span id="usuario-info" class="usuario" hidden></span>
+      <button id="btn-login" class="btn">Ingresar</button>
+      <button id="btn-logout" class="btn btn-sec" hidden>Salir</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+
+  <main class="cuerpo">
+    <aside class="panel" id="panel">
+      <div class="filtros">
+        <input id="f-texto" type="search" placeholder="Buscar obra, barrio, dirección…" aria-label="Buscar">
+        <div class="fila">
+          <select id="f-tipo" aria-label="Tipo de obra"><option value="">Todos los tipos</option></select>
+          <select id="f-estado" aria-label="Estado"><option value="">Todos los estados</option></select>
+        </div>
+        <div class="fila" id="fila-semaforo">
+          <select id="f-semaforo" aria-label="Semáforo">
+            <option value="">Todo semáforo</option>
+            <option>Rojo</option><option>Amarillo</option><option>Verde</option><option>Sin iniciar</option>
+          </select>
+          <select id="f-barrio" aria-label="Barrio"><option value="">Todos los barrios</option></select>
+        </div>
+      </div>
+      <p class="contador" id="contador"></p>
+      <ul class="lista" id="lista"></ul>
+    </aside>
+
+    <div class="mapa-wrap">
+      <div id="mapa"></div>
+      <div class="leyenda" id="leyenda"></div>
+    </div>
+
+    <article class="ficha" id="ficha" hidden aria-live="polite"></article>
+  </main>
+
+  <dialog id="dlg-login">
+    <form id="form-login" method="dialog">
+      <h2>Ingreso municipal</h2>
+      <p class="nota">Solo para personal del municipio. Los vecinos no necesitan usuario.</p>
+      <label>Email <input id="login-email" type="email" required autocomplete="username"></label>
+      <label>Contraseña <input id="login-pass" type="password" required autocomplete="current-password"></label>
+      <p class="error" id="login-error"></p>
+      <div class="acciones">
+        <button type="button" class="btn btn-sec" id="login-cancelar">Cancelar</button>
+        <button type="submit" class="btn">Ingresar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
