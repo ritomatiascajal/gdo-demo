@@ -17,7 +17,12 @@ certificados, y visor público para vecinos.
 - Funcionario: tablero con semáforo, indicadores, ítems, certificados, fotos y validación de mediciones.
 - Secretario OO.PP., Jefe de SSPP y Administrador: alta y edición de obras (ubicación marcada en el mapa,
   estado, contratista, inspector, publicación en el visor) y de sus ítems (no se borra un ítem con mediciones).
-- Modo claro / oscuro (botón ☾/☀), recordado en el navegador; también en la app del inspector.
+- Modo claro / oscuro (botón ☾/☀), recordado en el navegador; también en la app del inspector. El mapa oscuro
+  es OpenStreetMap con un filtro CSS (no depende de proveedores con API key).
+- Filtro por estado sobre el mapa (chips) e indicadores que se tocan y muestran el detalle (listas y gráficos).
+- **Cartel de obra con QR** (gestión): hoja A4 apaisada lista para imprimir; el QR abre la ficha pública de la obra.
+- **Enlace directo** a cada obra (`#obra=OB-001`) y botón Compartir (WhatsApp / menú del celular).
+- **Recorrido**: presenta las obras filtradas una por una, con vuelo de mapa y ficha (para reuniones o pantallas).
 
 ## App del inspector
 `inspector.html` (se instala en el celular desde el navegador: menú ⋮ → "Agregar a la pantalla principal").

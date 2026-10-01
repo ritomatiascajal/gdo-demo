@@ -354,11 +354,11 @@ dialog .btn.btn-sec { background: transparent; color: var(--tinta-2); border-col
   .panel { grid-row: 2; border-right: 0; border-top: 1px solid var(--linea); }
   .lista { overflow: visible; }
   .ficha { position: fixed; inset: auto 0 0 0; top: 18vh; width: auto; border-radius: 14px 14px 0 0; }
-  .kpis { grid-template-columns: repeat(3, 1fr); }
-  .kpi { font: inherit; color: inherit; text-align: left; background: none; border: 0; border-radius: 6px; padding: 4px 6px; cursor: pointer; }
-.kpi:hover, .kpi:focus-visible { background: var(--hover); outline: none; }
-.kpi .e::after { content: ' ›'; opacity: .5; }
-.kpi .v { font-size: 16px; }
+  .kpis { display: flex; overflow-x: auto; gap: 4px; padding: 8px 10px; scrollbar-width: none; }
+  .kpis::-webkit-scrollbar { display: none; }
+  .kpi { flex: none; }
+  .kpi .v { font-size: 16px; white-space: nowrap; }
+  .kpi .e { white-space: nowrap; }
   .marca .sub, .usuario, .pie-lugar { display: none; }
   .chips-estado { left: 50px; top: 8px; }
   .btn-mapa { bottom: 18px; padding: 7px 11px; }
