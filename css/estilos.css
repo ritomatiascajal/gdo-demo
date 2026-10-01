@@ -23,7 +23,6 @@
   --aviso-rojo: #fbe9e7;
   --pend: #fffaf0;
   --pend-borde: #f0d9a8;
-  --logo-fondo: transparent;
   --sombra: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
   --radio: 8px;
   color-scheme: light;
@@ -54,7 +53,6 @@
   --aviso-rojo: #3d2220;
   --pend: #2a2618;
   --pend-borde: #5a4a1f;
-  --logo-fondo: #f4f3ef;
   --sombra: 0 1px 3px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
   color-scheme: dark;
 }
@@ -90,7 +88,9 @@ a { color: var(--acento-txt); }
 .inicio-top { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; }
 .muni { font-size: 13px; color: var(--tinta-2); letter-spacing: .02em; }
 .inicio-centro { align-self: center; justify-self: center; width: min(860px, 100%); padding: 24px 20px; text-align: center; }
-.logo-app { font-size: 46px; color: var(--acento-txt); line-height: 1; }
+.logo-app { display: inline-block; width: 64px; height: 64px; color: var(--acento); }
+.logo-app svg, .marca .logo svg { width: 100%; height: 100%; display: block; }
+:root[data-theme="dark"] .logo-app { color: #2f6fae; }
 .inicio h1 { font-size: clamp(28px, 5vw, 42px); margin-top: 8px; letter-spacing: -.01em; }
 .lema { color: var(--tinta-2); font-size: 16px; margin: 10px auto 28px; max-width: 520px; }
 .opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; text-align: left; }
@@ -111,7 +111,7 @@ a { color: var(--acento-txt); }
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px;
   padding: 16px 20px 22px; border-top: 1px solid var(--linea); font-size: 13px; color: var(--tinta-2);
 }
-.cred-logo { display: inline-flex; background: var(--logo-fondo); border-radius: 8px; padding: 4px 8px; }
+.cred-logo { display: inline-flex; }
 .cred-logo img { height: 34px; display: block; }
 .cred-datos { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; }
 
@@ -122,7 +122,7 @@ a { color: var(--acento-txt); }
   padding: 8px 16px; background: var(--barra); color: #fff;
 }
 .marca { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0; }
-.marca .logo { font-size: 26px; line-height: 1; }
+.marca .logo { width: 30px; height: 30px; color: #fff; flex: none; }
 .marca .h1 { display: block; font-size: 17px; font-weight: 600; }
 .marca .sub { display: block; font-size: 12.5px; opacity: .85; }
 .sesion { display: flex; align-items: center; gap: 8px; }
@@ -132,6 +132,9 @@ a { color: var(--acento-txt); }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;
   padding: 10px 16px; border-bottom: 1px solid var(--linea); background: var(--superficie);
 }
+.kpi { font: inherit; color: inherit; text-align: left; background: none; border: 0; border-radius: 6px; padding: 4px 6px; cursor: pointer; }
+.kpi:hover, .kpi:focus-visible { background: var(--hover); outline: none; }
+.kpi .e::after { content: ' ›'; opacity: .5; }
 .kpi .v { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; }
 .kpi .e { font-size: 12px; color: var(--tinta-2); }
 .kpi.alerta .v { color: var(--rojo); }
@@ -174,6 +177,69 @@ textarea { resize: vertical; min-height: 54px; }
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1200;
   display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; border-radius: var(--radio);
   background: var(--barra); color: #fff; box-shadow: var(--sombra); font-size: 14px; font-weight: 500;
+}
+
+/* Logo HydroGIS: versión para fondo claro y oscuro */
+.logo-o { display: none !important; }
+:root[data-theme="dark"] .logo-c { display: none !important; }
+:root[data-theme="dark"] .logo-o { display: block !important; }
+
+/* Mapa base oscuro sin proveedor externo: se oscurecen las teselas de OpenStreetMap */
+.mapa-wrap.calles-oscuro .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.85) saturate(.55); }
+
+/* Filtro por estado sobre el mapa */
+.chips-estado {
+  position: absolute; top: 10px; left: 56px; z-index: 900; max-width: calc(100% - 68px);
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px; scrollbar-width: none;
+}
+.chips-estado::-webkit-scrollbar { display: none; }
+.chip-est {
+  font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px;
+  background: var(--superficie); color: var(--tinta); border: 1px solid var(--linea); box-shadow: var(--sombra);
+}
+.chip-est .n { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--tinta-2); }
+.chip-est .d { width: 9px; height: 9px; border-radius: 50%; }
+.chip-est.on { background: var(--acento); color: #fff; border-color: var(--acento); }
+.chip-est.on .n { color: #fff; opacity: .85; }
+.btn-mapa {
+  position: absolute; right: 12px; bottom: 26px; z-index: 900; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 8px 13px; border-radius: 999px; border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra);
+}
+.btn-mapa:hover { border-color: var(--acento); }
+.banner-recorrido {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 1200;
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-radius: 999px;
+  background: var(--barra); color: #fff; box-shadow: var(--sombra); font-size: 13.5px; font-weight: 500; max-width: 92%;
+}
+.banner-recorrido #rec-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner-recorrido .btn { padding: 5px 10px; }
+
+/* Detalle de indicadores */
+.dlg-kpi { width: min(560px, 94vw); max-height: 86vh; padding: 0; overflow: hidden; }
+.dlg-kpi[open] { display: flex; flex-direction: column; }
+.kpi-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 18px 8px; }
+.kpi-cab h2 { font-size: 17px; }
+.kpi-cab .cerrar { border: 0; background: none; font-size: 24px; cursor: pointer; color: var(--tinta-2); }
+#kpi-cuerpo { padding: 4px 18px 8px; overflow-y: auto; }
+#kpi-acciones { padding: 10px 18px 16px; border-top: 1px solid var(--linea); }
+#kpi-acciones:empty { display: none; }
+.kpi-nota { font-size: 13px; color: var(--tinta-2); margin: 0 0 10px; }
+.barras-h { display: grid; gap: 7px; margin: 6px 0 12px; }
+.bh { display: grid; grid-template-columns: minmax(110px, 38%) 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.bh .trk { height: 10px; background: var(--pista); border-radius: 3px; overflow: hidden; }
+.bh .fill { height: 100%; background: var(--acento); border-radius: 3px; }
+.bh .val { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; white-space: nowrap; }
+.filas-kpi { list-style: none; margin: 0; padding: 0; }
+.filas-kpi li { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--linea-suave); cursor: pointer; border-radius: 4px; }
+.filas-kpi li:hover { background: var(--hover); }
+.filas-kpi .t { font-size: 13.5px; font-weight: 500; }
+.filas-kpi .s { font-size: 12px; color: var(--tinta-2); }
+.filas-kpi .v { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; text-align: right; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 3000;
+  background: #1d2126; color: #fff; padding: 11px 16px; border-radius: 10px; font-size: 14px; max-width: 92vw; box-shadow: var(--sombra);
 }
 
 /* Leaflet en modo oscuro */
@@ -264,7 +330,7 @@ table.t td.acc { white-space: nowrap; text-align: right; }
   padding: 5px 16px; font-size: 12px; color: var(--tinta-2);
   background: var(--superficie); border-top: 1px solid var(--linea);
 }
-.pie img { height: 18px; display: block; background: var(--logo-fondo); border-radius: 4px; padding: 1px 4px; }
+.pie-logo img { height: 18px; display: block; }
 
 /* Login */
 dialog { border: 0; border-radius: var(--radio); box-shadow: var(--sombra); padding: 20px; width: min(360px, 92vw); background: var(--superficie); color: var(--tinta); }
@@ -289,8 +355,14 @@ dialog .btn.btn-sec { background: transparent; color: var(--tinta-2); border-col
   .lista { overflow: visible; }
   .ficha { position: fixed; inset: auto 0 0 0; top: 18vh; width: auto; border-radius: 14px 14px 0 0; }
   .kpis { grid-template-columns: repeat(3, 1fr); }
-  .kpi .v { font-size: 16px; }
+  .kpi { font: inherit; color: inherit; text-align: left; background: none; border: 0; border-radius: 6px; padding: 4px 6px; cursor: pointer; }
+.kpi:hover, .kpi:focus-visible { background: var(--hover); outline: none; }
+.kpi .e::after { content: ' ›'; opacity: .5; }
+.kpi .v { font-size: 16px; }
   .marca .sub, .usuario, .pie-lugar { display: none; }
+  .chips-estado { left: 50px; top: 8px; }
+  .btn-mapa { bottom: 18px; padding: 7px 11px; }
+  .bh { grid-template-columns: 100px 1fr auto; }
   .barra { padding: 8px 10px; }
   .sesion { gap: 6px; }
   .sesion .btn { padding: 6px 10px; }

@@ -12,13 +12,21 @@
     'En ejecución': '#2f6fae', 'Paralizada': '#c0392b', 'Finalizada': '#2e8b57',
     'Recepción definitiva': '#2e8b57', 'Cancelada': '#5b6168'
   };
+  const GRUPOS = [
+    ['todas', 'Todas', null, null],
+    ['ejecucion', 'En ejecución', ['En ejecución'], '#2f6fae'],
+    ['paralizadas', 'Paralizadas', ['Paralizada'], '#c0392b'],
+    ['finalizadas', 'Finalizadas', ['Finalizada', 'Recepción definitiva'], '#2e8b57'],
+    ['proyecto', 'En proyecto / licitación', ['En proyecto', 'En licitación', 'Adjudicada'], '#8a9099'],
+    ['canceladas', 'Canceladas', ['Cancelada'], '#5b6168']
+  ];
   const ESTADOS = ['En proyecto', 'En licitación', 'Adjudicada', 'En ejecución', 'Paralizada', 'Finalizada', 'Recepción definitiva', 'Cancelada'];
   const ROLES_GESTION = ['Secretario de Obras Públicas', 'Jefe de Servicios Públicos', 'Administrador del sistema'];
   const ROLES_VALIDAN = ['Secretario de Obras Públicas', 'Jefe de Servicios Públicos'];
 
   const st = {
     rol: null, idUsuario: null, obras: [], resumen: null, contratistas: {}, usuarios: {}, inspectores: [],
-    cat: {}, marcadores: {}, activa: null, ed: null, enApp: false
+    cat: {}, marcadores: {}, activa: null, ed: null, enApp: false, grupo: 'todas'
   };
   const $ = (id) => document.getElementById(id);
 
@@ -38,20 +46,25 @@
 
   // ---------- mapa ----------
   const mapa = L.map('mapa', { zoomControl: true }).setView(cfg.centro, cfg.zoom);
-  const callesClaro = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
-  const callesOscuro = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' });
+  const calles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
   const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Imágenes © Esri' });
-  const calles = L.layerGroup();
-  const control = L.control.layers({ 'Calles': calles, 'Satélite': satelite }, null, { position: 'topleft' }).addTo(mapa);
+  L.control.layers({ 'Calles': calles, 'Satélite': satelite }, null, { position: 'topleft' }).addTo(mapa);
   calles.addTo(mapa);
+  // En modo oscuro se oscurecen las teselas de OpenStreetMap con un filtro (no requiere clave de ningún proveedor)
   function aplicarTemaMapa() {
     const oscuro = window.GDO_TEMA && window.GDO_TEMA.actual() === 'dark';
-    calles.clearLayers(); calles.addLayer(oscuro ? callesOscuro : callesClaro);
+    document.querySelector('.mapa-wrap').classList.toggle('calles-oscuro', oscuro && mapa.hasLayer(calles));
   }
   aplicarTemaMapa();
   document.addEventListener('tema', aplicarTemaMapa);
+  mapa.on('baselayerchange', aplicarTemaMapa);
   const capa = L.layerGroup().addTo(mapa);
   let marcadorEdicion = null;
+
+  function toast(msg, ms = 3500) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, ms);
+  }
 
   // ---------- pantalla de inicio ----------
   function mostrarInicio() {
@@ -63,7 +76,7 @@
   }
   $('op-vecino').addEventListener('click', async () => { mostrarApp(); if (!st.obras.length || interno()) await cargar(); });
   $('op-funcionario').addEventListener('click', abrirLogin);
-  $('btn-inicio').addEventListener('click', () => { if (!interno()) { cerrarFicha(); mostrarInicio(); } });
+  $('btn-inicio').addEventListener('click', () => { if (!$('banner-recorrido').hidden) terminarRecorrido(); if (!interno()) { cerrarFicha(); mostrarInicio(); } });
 
   // ---------- datos ----------
   async function cargar() {
@@ -96,6 +109,19 @@
     armarFiltros(); pintarKpis(); pintarLeyenda(); aplicarFiltros();
   }
 
+  function pintarChips() {
+    const cuenta = (g) => g[2] ? st.obras.filter((o) => g[2].includes(o.estado)).length : st.obras.length;
+    $('chips-estado').innerHTML = GRUPOS.filter((g) => !g[2] || cuenta(g) > 0 || g[0] === st.grupo).map((g) =>
+      `<button class="chip-est${st.grupo === g[0] ? ' on' : ''}" data-g="${g[0]}" aria-pressed="${st.grupo === g[0]}">
+        ${g[3] ? `<span class="d" style="background:${g[3]}"></span>` : ''}${esc(g[1])} <span class="n">${cuenta(g)}</span></button>`).join('');
+    $('chips-estado').querySelectorAll('.chip-est').forEach((b) => b.addEventListener('click', () => filtrarGrupo(b.dataset.g)));
+  }
+  function filtrarGrupo(g, extra = {}) {
+    st.grupo = g; $('f-estado').value = '';
+    $('f-semaforo').value = extra.semaforo || '';
+    cerrarFicha(); aplicarFiltros();
+  }
+
   async function cargarCatalogos() {
     const { data, error } = await sb.from('catalogos').select('categoria,valor,orden,activo').order('orden');
     if (error) { console.error(error); return; }
@@ -108,25 +134,117 @@
     const k = [];
     if (interno() && st.resumen) {
       const r = st.resumen;
-      k.push(['Obras', r.obras_registradas], ['En ejecución', r.obras_en_ejecucion],
-        ['Semáforo rojo', r.obras_semaforo_rojo, r.obras_semaforo_rojo > 0],
-        ['Cartera', millones(r.presupuesto_total)], ['Medido aprobado', millones(r.monto_medido_aprobado)],
-        ['Pagado', millones(r.monto_pagado)],
-        ['Mediciones a validar', r.mediciones_pendientes, r.mediciones_pendientes > 0],
-        ['Certif. sin fotos', r.certificados_sin_fotos, r.certificados_sin_fotos > 0],
-        ['Fotos a revisar', r.fotos_a_revisar, r.fotos_a_revisar > 0]);
+      k.push(['Obras', r.obras_registradas, false, 'obras'], ['En ejecución', r.obras_en_ejecucion, false, 'ejecucion'],
+        ['Semáforo rojo', r.obras_semaforo_rojo, r.obras_semaforo_rojo > 0, 'rojo'],
+        ['Cartera', millones(r.presupuesto_total), false, 'cartera'], ['Medido aprobado', millones(r.monto_medido_aprobado), false, 'medido'],
+        ['Pagado', millones(r.monto_pagado), false, 'pagado'],
+        ['Mediciones a validar', r.mediciones_pendientes, r.mediciones_pendientes > 0, 'pendientes'],
+        ['Certif. sin fotos', r.certificados_sin_fotos, r.certificados_sin_fotos > 0, 'sinfotos'],
+        ['Fotos a revisar', r.fotos_a_revisar, r.fotos_a_revisar > 0, 'fotoslejos']);
     } else {
       const o = st.obras;
       const ejec = o.filter((x) => x.estado === 'En ejecución').length;
       const fin = o.filter((x) => ['Finalizada', 'Recepción definitiva'].includes(x.estado)).length;
       const inv = o.reduce((s, x) => s + Number(x.presupuesto || 0), 0);
       const benef = o.reduce((s, x) => s + Number(x.beneficiarios || 0), 0);
-      k.push(['Obras publicadas', o.length], ['En ejecución', ejec], ['Finalizadas', fin],
-        ['Inversión', millones(inv)], ['Vecinos beneficiados', benef.toLocaleString('es-AR')]);
+      k.push(['Obras publicadas', o.length, false, 'obras'], ['En ejecución', ejec, false, 'ejecucion'], ['Finalizadas', fin, false, 'finalizadas'],
+        ['Inversión', millones(inv), false, 'cartera'], ['Vecinos beneficiados', benef.toLocaleString('es-AR'), false, 'benef']);
     }
-    $('kpis').innerHTML = k.map(([e, v, alerta]) =>
-      `<div class="kpi${alerta ? ' alerta' : ''}"><div class="v">${esc(v)}</div><div class="e">${esc(e)}</div></div>`).join('');
+    $('kpis').innerHTML = k.map(([e, v, alerta, clave]) =>
+      `<button class="kpi${alerta ? ' alerta' : ''}" data-k="${clave}" title="Ver detalle"><div class="v">${esc(v)}</div><div class="e">${esc(e)}</div></button>`).join('');
+    $('kpis').querySelectorAll('.kpi').forEach((b) => b.addEventListener('click', () => detalleKpi(b.dataset.k)));
   }
+
+  // ---------- detalle de indicadores ----------
+  function barrasH(pares, fmt = (v) => v) {
+    const max = Math.max(1, ...pares.map((p) => p[1]));
+    return `<div class="barras-h">${pares.map(([et, v, color]) => `<div class="bh"><span>${esc(et)}</span>
+      <div class="trk"><div class="fill" style="width:${(v / max) * 100}%${color ? ';background:' + color : ''}"></div></div><span class="val">${fmt(v)}</span></div>`).join('')}</div>`;
+  }
+  function filasObras(lista, valor) {
+    return `<ul class="filas-kpi">${lista.map((o) => `<li data-id="${esc(o.id_obra)}"><span class="punto" style="background:${colorObra(o)}"></span>
+      <div><div class="t">${esc(o.nombre)}</div><div class="s">${esc(o.id_obra)} · ${esc(o.barrio || '')} · ${esc(o.estado)}</div></div>
+      <span class="v">${valor(o)}</span></li>`).join('') || '<li class="estado-carga">Nada para mostrar.</li>'}</ul>`;
+  }
+  function agrupar(lista, clave, val) {
+    const m = new Map(); for (const o of lista) { const k = o[clave] || '—'; m.set(k, (m.get(k) || 0) + val(o)); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }
+  async function detalleKpi(k) {
+    const O = st.obras, dlg = $('dlg-kpi');
+    let tit = '', h = '', accion = null;
+    const sumar = (l, c) => l.reduce((s, o) => s + Number(o[c] || 0), 0);
+    switch (k) {
+      case 'obras':
+        tit = interno() ? 'Obras registradas' : 'Obras publicadas';
+        h = `<p class="kpi-nota">${O.length} obras por estado y por tipo.</p>` +
+          barrasH(GRUPOS.slice(1).map((g) => [g[1], O.filter((o) => g[2].includes(o.estado)).length, g[3]]).filter((x) => x[1] > 0)) +
+          barrasH(agrupar(O, 'tipo_obra', () => 1));
+        accion = ['Ver todas en el mapa', () => filtrarGrupo('todas')]; break;
+      case 'ejecucion': {
+        const l = O.filter((o) => o.estado === 'En ejecución').sort((a, b) => (a.avance_fisico || 0) - (b.avance_fisico || 0));
+        tit = `Obras en ejecución (${l.length})`;
+        h = `<p class="kpi-nota">Ordenadas de menor a mayor avance.</p>` + filasObras(l, (o) => pct(o.avance_fisico));
+        accion = ['Ver en el mapa', () => filtrarGrupo('ejecucion')]; break; }
+      case 'finalizadas': {
+        const l = O.filter((o) => ['Finalizada', 'Recepción definitiva'].includes(o.estado));
+        tit = `Obras finalizadas (${l.length})`; h = filasObras(l, (o) => millones(o.presupuesto));
+        accion = ['Ver en el mapa', () => filtrarGrupo('finalizadas')]; break; }
+      case 'rojo': {
+        const l = O.filter((o) => o.semaforo === 'Rojo').sort((a, b) => (a.desvio ?? 0) - (b.desvio ?? 0));
+        tit = `Obras con semáforo rojo (${l.length})`;
+        h = `<p class="kpi-nota">Paralizadas o con más de 10 puntos de atraso respecto del plan. Desvío = avance real − previsto.</p>` +
+          filasObras(l, (o) => o.estado === 'Paralizada' ? 'Paralizada' : (o.desvio != null ? pct(o.desvio) : '—'));
+        accion = ['Ver en el mapa', () => filtrarGrupo('todas', { semaforo: 'Rojo' })]; break; }
+      case 'cartera':
+        tit = interno() ? 'Cartera de obras' : 'Inversión en obras';
+        h = `<p class="kpi-nota">${millones(sumar(O, 'presupuesto'))} en total, por tipo de obra${interno() ? ', modalidad y fuente de financiamiento' : ''}.</p>` +
+          barrasH(agrupar(O, 'tipo_obra', (o) => Number(o.presupuesto || 0)), millones) +
+          (interno() ? barrasH(agrupar(O, 'modalidad', (o) => Number(o.presupuesto || 0)), millones) +
+            barrasH(agrupar(O, 'fuente_financiamiento', (o) => Number(o.presupuesto || 0)), millones) : '');
+        break;
+      case 'medido': {
+        const l = O.filter((o) => o.monto_medido_aprobado > 0).sort((a, b) => b.monto_medido_aprobado - a.monto_medido_aprobado);
+        tit = 'Monto medido y aprobado';
+        h = `<p class="kpi-nota">${millones(sumar(O, 'monto_medido_aprobado'))} de ${millones(sumar(O, 'presupuesto'))} de cartera (${pct(sumar(O, 'monto_medido_aprobado') / (sumar(O, 'presupuesto') || 1))}).</p>` +
+          filasObras(l, (o) => `${millones(o.monto_medido_aprobado)} · ${pct(o.avance_fisico)}`); break; }
+      case 'pagado': {
+        const l = O.filter((o) => o.modalidad === 'Contrato' && o.presupuesto > 0).sort((a, b) => (b.monto_pagado || 0) - (a.monto_pagado || 0));
+        tit = 'Pagado a contratistas';
+        h = `<p class="kpi-nota">Certificados pagados por obra, con el avance financiero (pagado / presupuesto). Las obras por administración no certifican.</p>` +
+          filasObras(l, (o) => `${millones(o.monto_pagado)} · ${pct(o.avance_financiero)}`); break; }
+      case 'benef': {
+        const l = O.filter((o) => o.beneficiarios > 0).sort((a, b) => b.beneficiarios - a.beneficiarios);
+        tit = 'Vecinos beneficiados'; h = filasObras(l, (o) => Number(o.beneficiarios).toLocaleString('es-AR')); break; }
+      case 'pendientes': case 'sinfotos': case 'fotoslejos': {
+        tit = { pendientes: 'Mediciones a validar', sinfotos: 'Certificados sin respaldo fotográfico', fotoslejos: 'Fotos tomadas lejos de la obra' }[k];
+        $('kpi-tit').textContent = tit; $('kpi-cuerpo').innerHTML = '<p class="estado-carga">Cargando…</p>'; $('kpi-acciones').innerHTML = '';
+        if (!dlg.open) dlg.showModal();
+        let r, fila;
+        if (k === 'pendientes') {
+          r = await sb.from('v_mediciones').select('id_medicion,id_obra,periodo,fecha,item_descripcion,unidad,cantidad_periodo,monto,inspector_id').eq('estado_validacion', 'Pendiente').order('fecha', { ascending: false });
+          fila = (m) => [m.id_obra, `${m.item_descripcion}`, `${m.id_medicion} · ${m.periodo} · ${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${m.unidad} · ${st.usuarios[m.inspector_id] || m.inspector_id}`, pesos(m.monto)];
+        } else if (k === 'sinfotos') {
+          r = await sb.from('v_certificados').select('id_certificado,id_obra,nro_certificado,periodo,estado,monto_neto').eq('control_respaldo', 'FALTAN FOTOS');
+          fila = (c) => [c.id_obra, `Certificado N° ${c.nro_certificado} — ${c.periodo}`, `${c.id_certificado} · ${c.estado}`, millones(c.monto_neto)];
+        } else {
+          r = await sb.from('v_fotos').select('id_foto,id_obra,periodo,fecha_hora,distancia_obra_m,cargada_por').eq('control_ubicacion', 'REVISAR');
+          fila = (f) => [f.id_obra, `Foto ${f.id_foto} — período ${f.periodo || '—'}`, `${new Date(f.fecha_hora).toLocaleString('es-AR')} · ${st.usuarios[f.cargada_por] || f.cargada_por || ''}`, `${Number(f.distancia_obra_m).toLocaleString('es-AR')} m`];
+        }
+        if (r.error) { $('kpi-cuerpo').innerHTML = `<p class="estado-carga">Error: ${esc(r.error.message)}</p>`; return; }
+        const nombre = (id) => st.obras.find((o) => o.id_obra === id)?.nombre || id;
+        h = `<p class="kpi-nota">${r.data.length} registro(s). Tocá uno para abrir la obra.</p><ul class="filas-kpi">` +
+          r.data.map((x) => { const [id, t, sub, v] = fila(x); return `<li data-id="${esc(id)}"><span></span><div><div class="t">${esc(t)}</div><div class="s">${esc(nombre(id))} · ${esc(sub)}</div></div><span class="v">${esc(v)}</span></li>`; }).join('') + '</ul>';
+        break; }
+    }
+    $('kpi-tit').textContent = tit; $('kpi-cuerpo').innerHTML = h;
+    $('kpi-acciones').innerHTML = accion ? `<button class="btn-f lleno" id="kpi-accion">${esc(accion[0])}</button>` : '';
+    if (accion) $('kpi-accion').addEventListener('click', () => { dlg.close(); accion[1](); });
+    $('kpi-cuerpo').querySelectorAll('li[data-id]').forEach((li) => li.addEventListener('click', () => { dlg.close(); abrirFicha(li.dataset.id, true); }));
+    if (!dlg.open) dlg.showModal();
+  }
+  $('kpi-cerrar').addEventListener('click', () => $('dlg-kpi').close());
+  $('dlg-kpi').addEventListener('click', (e) => { if (e.target === $('dlg-kpi')) $('dlg-kpi').close(); });
 
   function pintarLeyenda() {
     const pares = interno()
@@ -155,13 +273,17 @@
   function aplicarFiltros() {
     const t = $('f-texto').value.trim().toLowerCase();
     const tipo = $('f-tipo').value, est = $('f-estado').value, sem = $('f-semaforo').value, bar = $('f-barrio').value;
+    const grp = GRUPOS.find((g) => g[0] === st.grupo)?.[2];
     const vis = st.obras.filter((o) =>
+      (!grp || grp.includes(o.estado)) &&
       (!tipo || o.tipo_obra === tipo) && (!est || o.estado === est) && (!bar || o.barrio === bar) &&
       (!sem || o.semaforo === sem) &&
       (!t || [o.nombre, o.barrio, o.direccion, o.id_obra, o.descripcion].join(' ').toLowerCase().includes(t)));
-    pintarLista(vis); pintarMapa(vis);
+    pintarChips(); pintarLista(vis); pintarMapa(vis);
+    st.visibles = vis;
   }
-  ['f-texto', 'f-tipo', 'f-estado', 'f-semaforo', 'f-barrio'].forEach((id) => $(id).addEventListener('input', aplicarFiltros));
+  ['f-texto', 'f-tipo', 'f-semaforo', 'f-barrio'].forEach((id) => $(id).addEventListener('input', aplicarFiltros));
+  $('f-estado').addEventListener('input', () => { st.grupo = 'todas'; aplicarFiltros(); });
 
   // ---------- lista y mapa ----------
   function pintarLista(obras) {
@@ -214,7 +336,10 @@
       <div class="cod">${esc(o.id_obra)}${interno() && o.expediente ? ' · ' + esc(o.expediente) : ''}</div>
       <h2>${esc(o.nombre)}</h2>
       <div class="chips">${chips}</div>
-      ${puedeGestionar() ? '<div class="acciones-ficha"><button class="btn-f" id="btn-editar">✎ Editar obra</button></div>' : ''}
+      <div class="acciones-ficha">
+        ${puedeGestionar() ? '<button class="btn-f" id="btn-editar">✎ Editar obra</button><button class="btn-f" id="btn-cartel" title="Cartel de obra imprimible con código QR">▦ Cartel con QR</button>' : ''}
+        <button class="btn-f" id="btn-compartir" title="Compartir el enlace público de esta obra">↗ Compartir</button>
+      </div>
       <p class="desc">${esc(o.descripcion)}</p>`;
 
     if (interno()) {
@@ -256,7 +381,12 @@
     }
     f.innerHTML = html; f.hidden = false; f.classList.remove('oculta'); f.scrollTop = 0;
     f.querySelector('.cerrar').addEventListener('click', cerrarFicha);
-    if (puedeGestionar()) $('btn-editar').addEventListener('click', () => abrirEditor(o));
+    if (puedeGestionar()) {
+      $('btn-editar').addEventListener('click', () => abrirEditor(o));
+      $('btn-cartel').addEventListener('click', () => cartelQR(o));
+    }
+    $('btn-compartir').addEventListener('click', () => compartir(o));
+    if (location.hash !== '#obra=' + id) history.replaceState(null, '', '#obra=' + id);
     if (interno()) cargarDetalle(o);
   }
 
@@ -353,9 +483,116 @@
   function cerrarFicha() {
     terminarEleccion(false); quitarMarcadorEdicion(); st.ed = null;
     $('ficha').hidden = true; st.activa = null;
+    if (location.hash.startsWith('#obra=')) history.replaceState(null, '', location.pathname + location.search);
     document.querySelectorAll('.lista li.activa').forEach((li) => li.classList.remove('activa'));
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (st.eligiendo) terminarEleccion(false); else cerrarFicha(); } });
+
+  // ---------- enlace público, compartir y cartel con QR ----------
+  const urlObra = (id) => `${location.origin}${location.pathname}#obra=${id}`;
+
+  async function compartir(o) {
+    const url = urlObra(o.id_obra);
+    const texto = `${o.nombre} — ${o.estado}, ${pct(o.avance_fisico)} de avance. Seguila en el mapa de obras de ${cfg.municipio}:`;
+    if (!o.visible_publico && interno()) toast('Ojo: esta obra no está publicada, los vecinos no la van a ver.', 4500);
+    if (navigator.share) {
+      try { await navigator.share({ title: o.nombre, text: texto, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    window.open('https://wa.me/?text=' + encodeURIComponent(texto + ' ' + url), '_blank', 'noopener');
+  }
+
+  function cartelQR(o) {
+    if (typeof qrcode === 'undefined') { toast('No se pudo cargar el generador de QR. Revisá la conexión.'); return; }
+    if (!o.visible_publico) toast('La obra no está publicada: el QR va a abrir el visor, pero sin esta obra. Publicala desde "Editar obra".', 6000);
+    const url = urlObra(o.id_obra);
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    const svgQR = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    const base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
+    const empresa = st.contratistas[o.contratista_id] || (o.modalidad === 'Administración' ? 'Por administración municipal' : 'A adjudicar');
+    const dato = (k, v) => v ? `<div class="d"><span>${k}</span><strong>${esc(v)}</strong></div>` : '';
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cartel ${esc(o.id_obra)}</title>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        @page { size: A4 landscape; margin: 0; }
+        * { box-sizing: border-box; } body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #12202e; background: #ddd; }
+        .hoja { width: 297mm; height: 210mm; margin: 0 auto; background: #fff; display: grid; grid-template-rows: auto 1fr auto; }
+        .cab { background: #1f4e79; color: #fff; padding: 12mm 16mm 9mm; display: flex; justify-content: space-between; align-items: flex-end; }
+        .cab .m { font-size: 13pt; letter-spacing: .12em; text-transform: uppercase; opacity: .9; }
+        .cab .a { font-size: 11pt; opacity: .8; margin-top: 2mm; }
+        .cab .cod { font-size: 12pt; opacity: .85; }
+        .franja { height: 4mm; background: repeating-linear-gradient(-45deg, #f2b705 0 8mm, #1d2126 8mm 16mm); }
+        .cuerpo { padding: 10mm 16mm; display: grid; grid-template-columns: 1fr 64mm; gap: 12mm; }
+        h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 4mm; }
+        .desc { font-size: 14pt; color: #3c4a58; margin: 0 0 8mm; }
+        .datos { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 10mm; }
+        .d span { display: block; font-size: 10pt; text-transform: uppercase; letter-spacing: .08em; color: #5b6a78; }
+        .d strong { font-size: 16pt; }
+        .qr { border: 2px solid #1f4e79; border-radius: 4mm; padding: 5mm; text-align: center; align-self: start; }
+        .qr svg { width: 100%; height: auto; display: block; }
+        .qr p { margin: 4mm 0 0; font-size: 13pt; font-weight: 700; color: #1f4e79; line-height: 1.2; }
+        .qr small { display: block; font-size: 8.5pt; color: #5b6a78; margin-top: 2mm; word-break: break-all; }
+        .pie { padding: 0 16mm 8mm; display: flex; justify-content: space-between; align-items: center; font-size: 9pt; color: #5b6a78; }
+        .pie img { height: 9mm; }
+        .no-print { position: fixed; top: 10px; right: 10px; } .no-print button { font: inherit; padding: 8px 14px; cursor: pointer; }
+        @media print { body { background: #fff; } .no-print { display: none; } }
+      </style></head><body>
+      <div class="no-print"><button onclick="print()">Imprimir / guardar PDF</button></div>
+      <div class="hoja">
+        <div><div class="cab"><div><div class="m">${esc(cfg.municipio)}</div><div class="a">${esc(o.area_responsable || 'Obras Públicas')}</div></div><div class="cod">Obra ${esc(o.id_obra)}${o.expediente ? ' · Expte. ' + esc(o.expediente) : ''}</div></div><div class="franja"></div></div>
+        <div class="cuerpo">
+          <div>
+            <h1>${esc(o.nombre)}</h1>
+            <p class="desc">${esc(o.descripcion || '')}</p>
+            <div class="datos">
+              ${dato('Monto', o.presupuesto ? pesos(o.presupuesto) : '')}
+              ${dato('Empresa', empresa)}
+              ${dato('Plazo', o.plazo_dias ? o.plazo_dias + ' días' : '')}
+              ${dato('Inicio', o.fecha_inicio ? fecha(o.fecha_inicio) : '')}
+              ${dato('Fin previsto', o.fecha_fin_prevista ? fecha(o.fecha_fin_prevista) : '')}
+              ${dato('Financiamiento', o.fuente_financiamiento)}
+              ${dato('Beneficiarios', o.beneficiarios ? Number(o.beneficiarios).toLocaleString('es-AR') + ' vecinos' : '')}
+              ${dato('Ubicación', [o.barrio, o.direccion].filter(Boolean).join(' — '))}
+            </div>
+          </div>
+          <div class="qr">${svgQR}<p>Escaneá y seguí el avance de esta obra</p><small>${esc(url)}</small></div>
+        </div>
+        <div class="pie"><span>Información actualizada en tiempo real desde el sistema de seguimiento de obras.</span>
+          <span style="display:flex;align-items:center;gap:3mm">Desarrollado por <img src="${base}img/hydrogis.png" alt="HydroGIS"></span></div>
+      </div></body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { toast('El navegador bloqueó la ventana. Permití ventanas emergentes para este sitio.'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  // ---------- recorrido (modo presentación) ----------
+  const rec = { lista: [], i: 0, timer: null, pausa: false };
+  function iniciarRecorrido() {
+    rec.lista = (st.visibles || st.obras).filter((o) => o.lat != null);
+    if (!rec.lista.length) { toast('No hay obras para recorrer con los filtros actuales.'); return; }
+    rec.i = -1; rec.pausa = false; $('rec-pausa').textContent = '❚❚';
+    $('btn-recorrido').hidden = true; $('banner-recorrido').hidden = false;
+    pasoRecorrido();
+  }
+  function pasoRecorrido() {
+    clearTimeout(rec.timer);
+    rec.i = (rec.i + 1) % rec.lista.length;
+    const o = rec.lista[rec.i];
+    $('rec-txt').textContent = `${rec.i + 1}/${rec.lista.length} · ${o.nombre}`;
+    mapa.flyTo([o.lat, o.lng], 16, { duration: 1.6 });
+    setTimeout(() => { if (!$('banner-recorrido').hidden) abrirFicha(o.id_obra, false); }, 1700);
+    if (!rec.pausa) rec.timer = setTimeout(pasoRecorrido, 8000);
+  }
+  function terminarRecorrido() {
+    clearTimeout(rec.timer); $('banner-recorrido').hidden = true; $('btn-recorrido').hidden = false;
+    cerrarFicha(); aplicarFiltros();
+  }
+  $('btn-recorrido').addEventListener('click', iniciarRecorrido);
+  $('rec-sig').addEventListener('click', pasoRecorrido);
+  $('rec-fin').addEventListener('click', terminarRecorrido);
+  $('rec-pausa').addEventListener('click', () => {
+    rec.pausa = !rec.pausa; $('rec-pausa').textContent = rec.pausa ? '▶' : '❚❚';
+    clearTimeout(rec.timer); if (!rec.pausa) rec.timer = setTimeout(pasoRecorrido, 4000);
+  });
 
   // ---------- alta / edición de obra ----------
   $('btn-nueva').addEventListener('click', () => abrirEditor(null));
@@ -548,6 +785,7 @@
 
   // ---------- sesión ----------
   async function actualizarSesion(session) {
+    const enlace = (location.hash.match(/^#obra=([\w-]+)/) || [])[1];   // antes de cerrar fichas, que limpian el enlace
     st.rol = null; st.idUsuario = null;
     if (session) {
       const [r, u] = await Promise.all([sb.rpc('mi_rol'), sb.rpc('mi_usuario')]);
@@ -562,10 +800,20 @@
     $('btn-logout').hidden = !session;
     cerrarFicha();
     if (puedeGestionar()) await cargarCatalogos();
-    if (session) mostrarApp();
+    if (session || enlace) mostrarApp();
     if (session || st.enApp) await cargar();
     if (!session && !st.enApp) mostrarInicio();
+    if (enlace) {
+      if (st.obras.some((o) => o.id_obra === enlace)) abrirFicha(enlace, true);
+      else toast(`La obra ${enlace} no está publicada o no existe.`, 5000);
+    }
   }
+  window.addEventListener('hashchange', () => {
+    const id = (location.hash.match(/^#obra=([\w-]+)/) || [])[1];
+    if (!id || id === st.activa) return;
+    if (st.obras.some((o) => o.id_obra === id)) { mostrarApp(); abrirFicha(id, true); }
+    else toast(`La obra ${id} no está publicada o no existe.`, 5000);
+  });
 
   function abrirLogin() { $('login-error').textContent = ''; $('dlg-login').showModal(); }
   $('btn-login').addEventListener('click', abrirLogin);
@@ -577,7 +825,7 @@
     if (error) { $('login-error').textContent = 'Email o contraseña incorrectos.'; return; }
     $('dlg-login').close();
   });
-  $('btn-logout').addEventListener('click', async () => { st.enApp = false; await sb.auth.signOut(); });
+  $('btn-logout').addEventListener('click', async () => { st.enApp = false; history.replaceState(null, '', location.pathname); await sb.auth.signOut(); });
 
   let ultimoUid;
   sb.auth.onAuthStateChange((_ev, session) => {

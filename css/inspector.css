@@ -91,7 +91,9 @@ textarea { min-height: 70px; resize: vertical; }
 .btn.sec { background: transparent; color: var(--acento-txt); border: 1px solid var(--acento); }
 
 .login { display: grid; gap: 14px; margin-top: 8vh; }
-.login .logo { font-size: 44px; color: var(--acento-txt); text-align: center; }
+.login .logo { width: 60px; height: 60px; margin: 0 auto; color: var(--acento); }
+.login .logo svg { width: 100%; height: 100%; display: block; }
+:root[data-theme="dark"] .login .logo { color: #2f6fae; }
 .login h2 { text-align: center; font-size: 20px; }
 .login p { margin: 0; text-align: center; font-size: 13.5px; color: var(--tinta-2); }
 .error { color: var(--rojo); font-size: 13.5px; min-height: 1em; margin: 0; }
@@ -106,6 +108,9 @@ textarea { min-height: 70px; resize: vertical; }
 
 .btn-tema { border: 1px solid rgba(255,255,255,.5); background: transparent; color: #fff; font-size: 17px; width: 36px; height: 36px; border-radius: 8px; cursor: pointer; }
 .credito { display: grid; justify-items: center; gap: 6px; margin-top: 34px; font-size: 12.5px; color: var(--tinta-2); text-align: center; }
-.credito img { height: 30px; background: var(--logo-fondo); border-radius: 6px; padding: 3px 7px; }
+.credito img { height: 30px; display: block; }
+.logo-o { display: none !important; }
+:root[data-theme="dark"] .logo-c { display: none !important; }
+:root[data-theme="dark"] .logo-o { display: block !important; }
 .credito a { color: var(--acento-txt); }
 .credito .datos { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; }

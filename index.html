@@ -14,7 +14,8 @@
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
-  <link rel="icon" href="img/icono-192.png">
+  <link rel="icon" href="img/icono.svg" type="image/svg+xml">
+  <link rel="icon" href="img/icono-192.png" type="image/png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
@@ -29,7 +30,7 @@
     </div>
 
     <div class="inicio-centro">
-      <span class="logo-app" aria-hidden="true">▦</span>
+      <span class="logo-app"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 2.5c-9 0-16.3 7.1-16.3 16 0 11.6 16.3 27 16.3 27s16.3-15.4 16.3-27c0-8.9-7.3-16-16.3-16z" fill="currentColor"/><path d="M14.2 23.2c0-5.9 4.4-10.4 9.8-10.4s9.8 4.5 9.8 10.4z" fill="#f2b705"/><rect x="22.4" y="11.4" width="3.2" height="7.6" rx="1.2" fill="#d99a00"/><rect x="11.6" y="22.6" width="24.8" height="3.6" rx="1.8" fill="#f2b705"/></svg></span>
       <h1>Obras Municipales</h1>
       <p class="lema">Dónde están, en qué estado y cuánto avanzaron las obras de la ciudad.</p>
 
@@ -52,7 +53,7 @@
 
     <footer class="credito">
       <span class="cred-lbl">Desarrollado por</span>
-      <a href="https://instagram.com/hydrogis.arg" target="_blank" rel="noopener" class="cred-logo"><img src="img/hydrogis.png" alt="HydroGIS"></a>
+      <a href="https://instagram.com/hydrogis.arg" target="_blank" rel="noopener" class="cred-logo"><img class="logo-c" src="img/hydrogis.png" alt="HydroGIS"><img class="logo-o" src="img/hydrogis-oscuro.png" alt="HydroGIS"></a>
       <span class="cred-datos">
         <a href="mailto:hydrogis.arg@gmail.com">hydrogis.arg@gmail.com</a>
         <a href="https://instagram.com/hydrogis.arg" target="_blank" rel="noopener">@hydrogis.arg</a>
@@ -65,7 +66,7 @@
   <div id="app" class="app" hidden>
     <header class="barra">
       <button class="marca" id="btn-inicio" title="Volver al inicio">
-        <span class="logo" aria-hidden="true">▦</span>
+        <span class="logo"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 2.5c-9 0-16.3 7.1-16.3 16 0 11.6 16.3 27 16.3 27s16.3-15.4 16.3-27c0-8.9-7.3-16-16.3-16z" fill="currentColor"/><path d="M14.2 23.2c0-5.9 4.4-10.4 9.8-10.4s9.8 4.5 9.8 10.4z" fill="#f2b705"/><rect x="22.4" y="11.4" width="3.2" height="7.6" rx="1.2" fill="#d99a00"/><rect x="11.6" y="22.6" width="24.8" height="3.6" rx="1.8" fill="#f2b705"/></svg></span>
         <span>
           <span class="h1">Obras Municipales</span>
           <span class="sub" id="subtitulo">Municipalidad de Frías · Visor público</span>
@@ -105,7 +106,15 @@
 
       <div class="mapa-wrap">
         <div id="mapa"></div>
+        <div class="chips-estado" id="chips-estado" role="toolbar" aria-label="Filtrar por estado"></div>
         <div class="leyenda" id="leyenda"></div>
+        <button class="btn-mapa" id="btn-recorrido" title="Recorrer las obras una por una, para presentar">▶ Recorrido</button>
+        <div class="banner-recorrido" id="banner-recorrido" hidden>
+          <span id="rec-txt">Recorrido</span>
+          <button id="rec-pausa" class="btn btn-sec">❚❚</button>
+          <button id="rec-sig" class="btn btn-sec">⏭</button>
+          <button id="rec-fin" class="btn btn-sec">Terminar</button>
+        </div>
         <div class="banner-ubic" id="banner-ubic" hidden>
           <span>Tocá el mapa donde está la obra</span>
           <button id="ubic-cancelar" class="btn btn-sec">Cancelar</button>
@@ -117,7 +126,7 @@
 
     <footer class="pie">
       <span>Desarrollado por</span>
-      <img src="img/hydrogis.png" alt="HydroGIS">
+      <span class="pie-logo"><img class="logo-c" src="img/hydrogis.png" alt="HydroGIS"><img class="logo-o" src="img/hydrogis-oscuro.png" alt="HydroGIS"></span>
       <a href="mailto:hydrogis.arg@gmail.com">hydrogis.arg@gmail.com</a>
       <a href="https://instagram.com/hydrogis.arg" target="_blank" rel="noopener">@hydrogis.arg</a>
       <span class="pie-lugar">Córdoba, Argentina</span>
@@ -138,7 +147,16 @@
     </form>
   </dialog>
 
+  <dialog id="dlg-kpi" class="dlg-kpi">
+    <div class="kpi-cab"><h2 id="kpi-tit"></h2><button class="cerrar" id="kpi-cerrar" aria-label="Cerrar">×</button></div>
+    <div id="kpi-cuerpo"></div>
+    <div class="acciones" id="kpi-acciones"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/tema.js"></script>
