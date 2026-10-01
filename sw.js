@@ -1,7 +1,7 @@
 // Service worker mínimo: permite instalar la app y abrirla aunque la señal sea mala.
 // Estrategia: red primero y, si no hay conexión, la última copia guardada. Supabase nunca se cachea.
-const CACHE = 'gdo-v1';
-const BASE = ['inspector.html', 'css/inspector.css', 'js/inspector.js', 'js/config.js', 'manifest.json', 'img/icono-192.png'];
+const CACHE = 'gdo-v2';
+const BASE = ['inspector.html', 'css/inspector.css', 'js/inspector.js', 'js/config.js', 'js/tema.js', 'img/hydrogis.png', 'manifest.json', 'img/icono-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(BASE))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));

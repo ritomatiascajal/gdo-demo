@@ -4,16 +4,20 @@ Prototipo de plataforma para que un municipio gestione y siga sus obras: mapa co
 fichas de obra, carga de avances con foto y GPS desde el celular, circuito de validación y
 certificados, y visor público para vecinos.
 
-**Todos los datos son ficticios.**
+**Todos los datos son ficticios.** Desarrollado por **HydroGIS** — hydrogis.arg@gmail.com · Instagram @hydrogis.arg · Córdoba, Argentina.
 
 ## Stack
 - Base de datos: Supabase (Postgres + PostGIS, Auth, Storage, API automática). Plan gratuito.
 - Web y app del inspector: HTML/JS estático + Leaflet, publicado en GitHub Pages. Sin servidor propio.
 
-## Visor web
+## Visor web y tablero
 `index.html` + `js/` + `css/`. Se publica con GitHub Pages (Settings > Pages > Deploy from branch > main / root).
-- Sin ingresar: visor público (obras publicadas, estado y avance, sin montos de certificados).
-- Ingresando con un usuario municipal: tablero con semáforo, indicadores, ítems y certificados de cada obra.
+- Pantalla de inicio: el visitante elige **vecino** (visor público, sin usuario) o **funcionario** (ingresa con usuario).
+- Vecino: obras publicadas, estado y avance, sin montos de certificados.
+- Funcionario: tablero con semáforo, indicadores, ítems, certificados, fotos y validación de mediciones.
+- Secretario OO.PP., Jefe de SSPP y Administrador: alta y edición de obras (ubicación marcada en el mapa,
+  estado, contratista, inspector, publicación en el visor) y de sus ítems (no se borra un ítem con mediciones).
+- Modo claro / oscuro (botón ☾/☀), recordado en el navegador; también en la app del inspector.
 
 ## App del inspector
 `inspector.html` (se instala en el celular desde el navegador: menú ⋮ → "Agregar a la pantalla principal").

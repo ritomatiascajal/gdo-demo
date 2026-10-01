@@ -66,7 +66,14 @@
         <input id="l-pass" type="password" placeholder="Contraseña" autocomplete="current-password" required>
         <p class="error" id="l-error">${esc(msg)}</p>
         <button class="btn" type="submit">Ingresar</button>
-      </form>`;
+        <a href="./" style="text-align:center;font-size:13.5px;color:var(--acento-txt)">Ir al tablero y visor de obras</a>
+      </form>
+      <footer class="credito">
+        <span>Desarrollado por</span>
+        <img src="img/hydrogis.png" alt="HydroGIS">
+        <span class="datos"><a href="mailto:hydrogis.arg@gmail.com">hydrogis.arg@gmail.com</a>
+          <a href="https://instagram.com/hydrogis.arg" target="_blank" rel="noopener">@hydrogis.arg</a><span>Córdoba, Argentina</span></span>
+      </footer>`;
     $('f-login').addEventListener('submit', async (e) => {
       e.preventDefault(); $('l-error').textContent = 'Ingresando…';
       const { error } = await sb.auth.signInWithPassword({ email: $('l-email').value.trim(), password: $('l-pass').value });

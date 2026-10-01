@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f4e79">
   <title>Inspector de obra — Frías</title>
+  <script>
+    (function () { var t = null; try { t = localStorage.getItem('gdo-tema'); } catch (e) {}
+      if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t); })();
+  </script>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="img/icono-192.png">
   <link rel="apple-touch-icon" href="img/icono-192.png">
@@ -19,6 +24,7 @@
       <h1 id="titulo">Inspector de obra</h1>
       <p id="subtitulo">Municipalidad de Frías</p>
     </div>
+    <button class="btn-tema" data-tema aria-label="Cambiar entre modo claro y oscuro"></button>
     <button id="btn-menu" class="icono" aria-label="Salir" hidden title="Salir">⏻</button>
   </header>
 
@@ -28,6 +34,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
+  <script src="js/tema.js"></script>
   <script src="js/inspector.js"></script>
 </body>
 </html>
