@@ -10,7 +10,7 @@ create extension if not exists postgis with schema extensions;
 -- Limpieza (para poder re-ejecutar durante el prototipo)
 drop view  if exists public.v_resumen, public.v_obras_publicas, public.v_certificados,
                      public.v_fotos, public.v_obras, public.v_items, public.v_mediciones cascade;
-drop table if exists public.partes_diarios, public.certificados, public.fotos,
+drop table if exists public.notificaciones, public.mediciones_historial, public.partes_diarios, public.certificados, public.fotos,
                      public.mediciones, public.items, public.obras, public.contratistas,
                      public.usuarios, public.catalogos, public.parametros cascade;
 drop sequence if exists public.seq_obra, public.seq_item, public.seq_medicion,

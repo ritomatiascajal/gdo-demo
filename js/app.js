@@ -24,6 +24,10 @@
   const ROLES_GESTION = ['Secretario de Obras Públicas', 'Jefe de Servicios Públicos', 'Administrador del sistema'];
   const ROLES_VALIDAN = ['Secretario de Obras Públicas', 'Jefe de Servicios Públicos'];
 
+  const N = window.GDO_NOTIF;
+  const esMovil = () => window.matchMedia('(max-width: 760px)').matches;
+  const sinMovimiento = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const st = {
     rol: null, idUsuario: null, obras: [], resumen: null, contratistas: {}, usuarios: {}, inspectores: [],
     cat: {}, marcadores: {}, activa: null, ed: null, enApp: false, grupo: 'todas'
@@ -63,17 +67,55 @@
 
   function toast(msg, ms = 3500) {
     const t = $('toast'); t.textContent = msg; t.hidden = false;
+    t.classList.remove('entra'); void t.offsetWidth; t.classList.add('entra');
     clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, ms);
+  }
+
+  // Cuenta animada de un número ("$ 3.196,5 M", "36.290", "14") desde 0
+  function contar(el, ms = 900) {
+    const txt = el.textContent, m = /-?[\d.]+(,\d+)?/.exec(txt);
+    if (!m || sinMovimiento()) return;
+    const dec = m[1] ? m[1].length - 1 : 0;
+    const fin = Number(m[0].replace(/\./g, '').replace(',', '.'));
+    if (!isFinite(fin) || fin === 0) return;
+    const pre = txt.slice(0, m.index), post = txt.slice(m.index + m[0].length), t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = pre + (fin * e).toLocaleString('es-AR', { minimumFractionDigits: p < 1 ? 0 : dec, maximumFractionDigits: dec }) + post;
+      if (p < 1) requestAnimationFrame(paso); else el.textContent = txt;
+    };
+    requestAnimationFrame(paso);
   }
 
   // ---------- pantalla de inicio ----------
   function mostrarInicio() {
-    st.enApp = false; $('inicio').hidden = false; $('app').hidden = true; window.scrollTo(0, 0);
+    st.enApp = false; $('app').hidden = true;
+    const i = $('inicio'); i.hidden = false; i.classList.remove('sale'); void i.offsetWidth; i.classList.add('vuelve');
+    window.scrollTo(0, 0); cifrasInicio();
   }
   function mostrarApp() {
-    if (!st.enApp) { st.enApp = true; $('inicio').hidden = true; $('app').hidden = false; }
-    setTimeout(() => mapa.invalidateSize(), 0);
+    if (!st.enApp) {
+      st.enApp = true;
+      const i = $('inicio');
+      const fin = () => { i.hidden = true; i.classList.remove('sale'); const a = $('app'); a.hidden = false; a.classList.remove('entra'); void a.offsetWidth; a.classList.add('entra'); mapa.invalidateSize(); };
+      if (!i.hidden && !sinMovimiento()) { i.classList.add('sale'); setTimeout(fin, 320); } else fin();
+    }
+    setTimeout(() => mapa.invalidateSize(), 350);
   }
+  // Cifras del inicio (públicas), con cuenta animada
+  let cifrasCargadas = false;
+  async function cifrasInicio() {
+    if (cifrasCargadas) { document.querySelectorAll('#cifras b').forEach((b) => contar(b, 1200)); return; }
+    const { data, error } = await sb.from('v_obras_publicas').select('presupuesto,beneficiarios');
+    if (error || !data?.length) return;
+    cifrasCargadas = true;
+    $('ci-obras').textContent = data.length.toLocaleString('es-AR');
+    $('ci-inv').textContent = millones(data.reduce((s, x) => s + Number(x.presupuesto || 0), 0));
+    $('ci-benef').textContent = data.reduce((s, x) => s + Number(x.beneficiarios || 0), 0).toLocaleString('es-AR');
+    $('cifras').hidden = false;
+    document.querySelectorAll('#cifras b').forEach((b) => contar(b, 1400));
+  }
+  cifrasInicio();
   $('op-vecino').addEventListener('click', async () => { mostrarApp(); if (!st.obras.length || interno()) await cargar(); });
   $('op-funcionario').addEventListener('click', abrirLogin);
   $('btn-inicio').addEventListener('click', () => { if (!$('banner-recorrido').hidden) terminarRecorrido(); if (!interno()) { cerrarFicha(); mostrarInicio(); } });
@@ -152,7 +194,12 @@
     }
     $('kpis').innerHTML = k.map(([e, v, alerta, clave]) =>
       `<button class="kpi${alerta ? ' alerta' : ''}" data-k="${clave}" title="Ver detalle"><div class="v">${esc(v)}</div><div class="e">${esc(e)}</div></button>`).join('');
-    $('kpis').querySelectorAll('.kpi').forEach((b) => b.addEventListener('click', () => detalleKpi(b.dataset.k)));
+    $('kpis').querySelectorAll('.kpi').forEach((b, k) => {
+      b.addEventListener('click', () => detalleKpi(b.dataset.k));
+      b.style.setProperty('--i', k);
+      if (!st.kpisVistos) contar(b.querySelector('.v'));
+    });
+    st.kpisVistos = true;
   }
 
   // ---------- detalle de indicadores ----------
@@ -279,7 +326,7 @@
       (!tipo || o.tipo_obra === tipo) && (!est || o.estado === est) && (!bar || o.barrio === bar) &&
       (!sem || o.semaforo === sem) &&
       (!t || [o.nombre, o.barrio, o.direccion, o.id_obra, o.descripcion].join(' ').toLowerCase().includes(t)));
-    pintarChips(); pintarLista(vis); pintarMapa(vis);
+    pintarChips(); pintarLista(vis); pintarMapa(vis); contarFiltros();
     st.visibles = vis;
   }
   ['f-texto', 'f-tipo', 'f-semaforo', 'f-barrio'].forEach((id) => $(id).addEventListener('input', aplicarFiltros));
@@ -288,13 +335,14 @@
   // ---------- lista y mapa ----------
   function pintarLista(obras) {
     $('contador').textContent = `${obras.length} de ${st.obras.length} obras`;
-    $('lista').innerHTML = obras.map((o) => `
-      <li data-id="${esc(o.id_obra)}" class="${st.activa === o.id_obra ? 'activa' : ''}">
+    $('nav-n').textContent = obras.length;
+    $('lista').innerHTML = obras.map((o, k) => `
+      <li data-id="${esc(o.id_obra)}" class="${st.activa === o.id_obra ? 'activa' : ''}" style="--i:${Math.min(k, 15)}">
         <span class="punto" style="background:${colorObra(o)}"></span>
         <div><div class="t">${esc(o.nombre)}</div><div class="s">${esc(o.tipo_obra)} · ${esc(o.barrio || '')} · ${esc(o.estado)}</div></div>
         <span class="p">${pct(o.avance_fisico)}</span>
       </li>`).join('') || '<li class="estado-carga">Ninguna obra coincide con los filtros.</li>';
-    $('lista').querySelectorAll('li[data-id]').forEach((li) => li.addEventListener('click', () => abrirFicha(li.dataset.id, true)));
+    $('lista').querySelectorAll('li[data-id]').forEach((li) => li.addEventListener('click', () => { verVista('mapa'); abrirFicha(li.dataset.id, true); }));
   }
 
   function pintarMapa(obras) {
@@ -302,10 +350,13 @@
     const pts = [];
     for (const o of obras) {
       if (o.lat == null || o.lng == null) continue;
-      const m = L.circleMarker([o.lat, o.lng], { radius: 9, color: '#fff', weight: 2, fillColor: colorObra(o), fillOpacity: 0.95 })
+      const alerta = o.estado === 'Paralizada' || (interno() && o.semaforo === 'Rojo');
+      if (alerta) L.circleMarker([o.lat, o.lng], { radius: 10, color: colorObra(o), weight: 2, fill: false, interactive: false, className: 'anillo' }).addTo(capa);
+      const m = L.circleMarker([o.lat, o.lng], { radius: 9, color: '#fff', weight: 2, fillColor: colorObra(o), fillOpacity: 0.95, className: 'marcador' })
         .bindTooltip(`<strong>${esc(o.nombre)}</strong><br>${esc(o.estado)} · ${pct(o.avance_fisico)}`, { direction: 'top', offset: [0, -8] });
       m.on('click', () => { if (!st.eligiendo) abrirFicha(o.id_obra, false); });
       m.addTo(capa); st.marcadores[o.id_obra] = m; pts.push([o.lat, o.lng]);
+      const el = m.getElement(); if (el) el.style.animationDelay = `${Math.min(pts.length, 25) * 35}ms`;
     }
     if (pts.length && !st.activa) mapa.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
   }
@@ -332,7 +383,7 @@
       interno() ? `<span class="chip sem" style="background:${colorObra(o)}">${esc(o.semaforo)}</span>` : ''
     ].join('');
 
-    let html = `<button class="cerrar" aria-label="Cerrar">×</button>
+    let html = `<div class="manija" aria-hidden="true"></div><button class="cerrar" aria-label="Cerrar">×</button>
       <div class="cod">${esc(o.id_obra)}${interno() && o.expediente ? ' · ' + esc(o.expediente) : ''}</div>
       <h2>${esc(o.nombre)}</h2>
       <div class="chips">${chips}</div>
@@ -379,7 +430,9 @@
         <dt>Beneficiarios</dt><dd>${o.beneficiarios ? Number(o.beneficiarios).toLocaleString('es-AR') + ' vecinos' : '—'}</dd>
       </dl>`;
     }
+    const yaAbierta = !f.hidden;
     f.innerHTML = html; f.hidden = false; f.classList.remove('oculta'); f.scrollTop = 0;
+    if (!yaAbierta) { f.classList.remove('abre'); void f.offsetWidth; f.classList.add('abre'); }
     f.querySelector('.cerrar').addEventListener('click', cerrarFicha);
     if (puedeGestionar()) {
       $('btn-editar').addEventListener('click', () => abrirEditor(o));
@@ -390,22 +443,25 @@
     if (interno()) cargarDetalle(o);
   }
 
+  const ESTADOS_MED = ['Aprobada', 'Observada', 'Rechazada', 'Pendiente'];
+  const COLOR_MED = { Aprobada: 'var(--verde)', Observada: 'var(--rojo)', Rechazada: 'var(--rojo)', Pendiente: 'var(--amarillo)' };
+
   async function cargarDetalle(o) {
-    const [it, ce, pe, fo] = await Promise.all([
+    const [it, ce, me, fo] = await Promise.all([
       sb.from('v_items').select('id_item,nro_item,rubro,descripcion,unidad,cantidad,precio_unitario,subtotal,incidencia,avance_item').eq('id_obra', o.id_obra).order('nro_item'),
       o.modalidad === 'Contrato'
         ? sb.from('v_certificados').select('nro_certificado,periodo,estado,monto_bruto,monto_neto,control_respaldo').eq('id_obra', o.id_obra).order('nro_certificado')
         : Promise.resolve({ data: [] }),
-      sb.from('v_mediciones').select('id_medicion,periodo,fecha,item_descripcion,unidad,cantidad_periodo,monto,inspector_id,observaciones')
-        .eq('id_obra', o.id_obra).eq('estado_validacion', 'Pendiente').order('fecha', { ascending: false }),
-      sb.from('v_fotos').select('id_foto,id_medicion,archivo,fecha_hora,distancia_obra_m,control_ubicacion')
-        .eq('id_obra', o.id_obra).order('fecha_hora', { ascending: false }).limit(30)
+      sb.from('v_mediciones').select('id_medicion,periodo,fecha,item_descripcion,unidad,cantidad_periodo,monto,inspector_id,observaciones,estado_validacion,validado_por,creado_en')
+        .eq('id_obra', o.id_obra).order('fecha', { ascending: false }).order('creado_en', { ascending: false }).limit(60),
+      sb.from('v_fotos').select('id_foto,id_medicion,archivo,fecha_hora,distancia_obra_m,control_ubicacion,lat,lng')
+        .eq('id_obra', o.id_obra).order('fecha_hora', { ascending: false }).limit(40)
     ]);
     const cont = $('ficha-detalle');
     if (!cont || st.activa !== o.id_obra) return;
-    const err = it.error || ce.error || pe.error || fo.error;
+    const err = it.error || ce.error || me.error || fo.error;
     if (err) { cont.innerHTML = `<p class="estado-carga">Error: ${esc(err.message)}</p>`; return; }
-    o.items = it.data;
+    o.items = it.data; o.certs = ce.data; o.meds = me.data;
 
     // Fotos con archivo real en el almacenamiento (las del Excel de ejemplo no tienen archivo)
     let fotos = [];
@@ -414,27 +470,47 @@
       const urls = Object.fromEntries((r.data || []).filter((x) => x.signedUrl).map((x) => [x.path, x.signedUrl]));
       fotos = fo.data.filter((f) => urls[f.archivo]).map((f) => ({ ...f, url: urls[f.archivo] }));
     }
+    if (!$('ficha-detalle') || st.activa !== o.id_obra) return;
+    st.fotosFicha = fotos;
     const fotosDe = (idMed) => fotos.filter((f) => f.id_medicion === idMed);
-    const mini = (f) => `<a href="${f.url}" target="_blank" rel="noopener" class="mini${f.control_ubicacion === 'REVISAR' ? ' revisar' : ''}"
+    const mini = (f) => `<button type="button" class="mini${f.control_ubicacion === 'REVISAR' ? ' revisar' : ''}" data-foto="${esc(f.id_foto)}"
         title="${esc(new Date(f.fecha_hora).toLocaleString('es-AR'))}${f.distancia_obra_m != null ? ' · a ' + f.distancia_obra_m + ' m de la obra' : ' · sin GPS'}">
-        <img src="${f.url}" alt="Foto ${esc(f.id_foto)}" loading="lazy">${f.control_ubicacion === 'REVISAR' ? '<span>lejos</span>' : ''}</a>`;
+        <img src="${f.url}" alt="Foto ${esc(f.id_foto)}" loading="lazy">${f.control_ubicacion === 'REVISAR' ? '<span>lejos</span>' : ''}</button>`;
+    const quien = (id) => esc(st.usuarios[id] || id || '—');
+    const bloqueada = (m) => { const c = ce.data.find((x) => x.periodo === m.periodo && ['Liquidado', 'Pagado'].includes(x.estado)); return c ? c.estado : null; };
 
+    const pend = me.data.filter((m) => m.estado_validacion === 'Pendiente');
+    const decididas = me.data.filter((m) => m.estado_validacion !== 'Pendiente').slice(0, 8);
     let h = '';
-    if (pe.data.length) {
-      h += `<h3>Mediciones a validar (${pe.data.length})</h3>` + pe.data.map((m) => `
-        <div class="pend" data-med="${esc(m.id_medicion)}">
+    if (pend.length) {
+      h += `<h3>Mediciones a validar (${pend.length})</h3>` + pend.map((m, k) => `
+        <div class="pend" data-med="${esc(m.id_medicion)}" style="--i:${k}">
           <div class="pend-cab"><strong>${esc(m.item_descripcion)}</strong><span class="num">${pesos(m.monto)}</span></div>
-          <div class="pend-sub">${esc(m.id_medicion)} · ${esc(m.periodo)} · ${fecha(m.fecha)} · <span class="num">${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${esc(m.unidad)}</span> · ${esc(st.usuarios[m.inspector_id] || m.inspector_id)}</div>
+          <div class="pend-sub">${esc(m.id_medicion)} · ${esc(m.periodo)} · ${fecha(m.fecha)} · <span class="num">${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${esc(m.unidad)}</span> · ${quien(m.inspector_id)}</div>
           ${m.observaciones ? `<div class="pend-sub">“${esc(m.observaciones)}”</div>` : ''}
           ${fotosDe(m.id_medicion).length ? `<div class="minis">${fotosDe(m.id_medicion).map(mini).join('')}</div>` : '<div class="pend-sub" style="color:var(--rojo)">Sin foto cargada</div>'}
-          ${puedeValidar() ? `<div class="pend-acc"><button class="btn-v ok" data-acc="Aprobada">Aprobar</button><button class="btn-v obs" data-acc="Observada">Observar</button></div>` : ''}
+          ${puedeValidar() ? `<div class="pend-acc"><button class="btn-v ok" data-acc="Aprobada">✓ Aprobar</button><button class="btn-v obs" data-acc="Observada">✎ Observar</button></div>` : ''}
         </div>`).join('');
+    }
+    if (decididas.length) {
+      h += `<h3><span>Últimas decisiones</span>${puedeValidar() ? '<small class="ayuda">Se pueden revisar y cambiar</small>' : ''}</h3><ul class="decisiones">` + decididas.map((m) => {
+        const lock = bloqueada(m);
+        return `<li data-med="${esc(m.id_medicion)}">
+          <span class="dec-punto" style="background:${COLOR_MED[m.estado_validacion]}"></span>
+          <div class="dec-txt"><div><strong>${esc(m.item_descripcion)}</strong></div>
+            <div class="pend-sub">${esc(m.id_medicion)} · ${esc(m.periodo)} · <span class="num">${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${esc(m.unidad)}</span> · <b style="color:${COLOR_MED[m.estado_validacion]}">${esc(m.estado_validacion)}</b>${m.validado_por ? ' por ' + quien(m.validado_por) : ''}</div>
+            ${m.observaciones && m.estado_validacion !== 'Aprobada' ? `<div class="pend-sub">“${esc(m.observaciones)}”</div>` : ''}
+            ${fotosDe(m.id_medicion).length ? `<div class="minis">${fotosDe(m.id_medicion).map(mini).join('')}</div>` : ''}</div>
+          ${puedeValidar() ? (lock ? `<span class="candado" title="El certificado de ${esc(m.periodo)} ya está ${lock}: no se puede cambiar">🔒 ${esc(lock)}</span>`
+            : '<button class="btn-f chico" data-cambiar>Cambiar</button>') : ''}
+        </li>`; }).join('') + '</ul>';
     }
     const gest = puedeGestionar();
     h += `<h3><span>Ítems (${it.data.length})</span>${gest ? '<button class="btn-f" id="btn-item-nuevo">＋ Ítem</button>' : ''}</h3>
       <div id="item-form-slot"></div>
       <table class="t"><thead><tr><th>#</th><th>Ítem</th><th class="n">Incid.</th><th class="n">Avance</th>${gest ? '<th></th>' : ''}</tr></thead><tbody>` +
-      it.data.map((i) => `<tr data-item="${esc(i.id_item)}"><td>${i.nro_item}</td><td>${esc(i.descripcion)}<br><small>${Number(i.cantidad).toLocaleString('es-AR')} ${esc(i.unidad)} × ${pesos(i.precio_unitario)}</small></td>
+      it.data.map((i) => `<tr data-item="${esc(i.id_item)}"><td>${i.nro_item}</td><td>${esc(i.descripcion)}<br><small>${Number(i.cantidad).toLocaleString('es-AR')} ${esc(i.unidad)} × ${pesos(i.precio_unitario)}</small>
+        <div class="mini-trk"><div style="--w:${Math.min(100, (i.avance_item || 0) * 100)}%"></div></div></td>
         <td class="n">${pct(i.incidencia)}</td><td class="n">${pct(i.avance_item)}</td>
         ${gest ? `<td class="acc"><button class="mini-btn" data-ed-item title="Editar ítem">✎</button><button class="mini-btn" data-del-item title="Borrar ítem">🗑</button></td>` : ''}</tr>`).join('') +
       (it.data.length ? '' : `<tr><td colspan="${gest ? 5 : 4}" class="estado-carga">Sin ítems.</td></tr>`) + '</tbody></table>';
@@ -448,12 +524,15 @@
     }
     const aRevisar = fo.data.filter((f) => f.control_ubicacion === 'REVISAR').length;
     h += `<h3>Fotos (${fo.data.length} registradas${aRevisar ? `, ${aRevisar} a revisar por ubicación` : ''})</h3>` +
-      (fotos.length ? `<div class="minis grande">${fotos.map(mini).join('')}</div>`
+      (fotos.length ? `<div class="minis grande">${fotos.map(mini).join('')}</div><p class="ayuda">Tocá una foto para ver sus datos de captura (GPS, hora, equipo).</p>`
         : '<p class="estado-carga">Las fotos de los datos de ejemplo no tienen imagen. Las que cargue el inspector desde la app aparecen acá.</p>');
     cont.innerHTML = h;
 
     cont.querySelectorAll('.pend-acc button').forEach((b) => b.addEventListener('click', () =>
       validar(o, b.closest('.pend').dataset.med, b.dataset.acc, b)));
+    cont.querySelectorAll('[data-cambiar]').forEach((b) => b.addEventListener('click', () =>
+      dialogoDecision(o, o.meds.find((m) => m.id_medicion === b.closest('li').dataset.med))));
+    cont.querySelectorAll('[data-foto]').forEach((b) => b.addEventListener('click', () => verFoto(o, b.dataset.foto)));
     if (gest) {
       $('btn-item-nuevo').addEventListener('click', () => formItem(o, null));
       cont.querySelectorAll('[data-ed-item]').forEach((b) => b.addEventListener('click', () =>
@@ -465,6 +544,15 @@
 
   async function refrescar(id) { await cargar(); if (id) abrirFicha(id, false); }
 
+  async function guardarDecision(idMed, estado, motivo) {
+    const cambios = { estado_validacion: estado, validado_por: estado === 'Pendiente' ? null : st.idUsuario };
+    if (motivo) cambios.observaciones = motivo;
+    const { data, error } = await sb.from('mediciones').update(cambios).eq('id_medicion', idMed).select('id_medicion');
+    if (error) return error.message.replace(/^.*?No se puede/, 'No se puede');
+    if (!data.length) return 'La base no permitió el cambio (revisá tu rol o actualizá la base con el script 05).';
+    return null;
+  }
+
   async function validar(o, idMed, estado, btn) {
     let obs = null;
     if (estado === 'Observada') {
@@ -473,12 +561,106 @@
     }
     const botones = btn.closest('.pend-acc').querySelectorAll('button');
     botones.forEach((x) => { x.disabled = true; });
-    const cambios = { estado_validacion: estado, validado_por: st.idUsuario };
-    if (obs) cambios.observaciones = obs;
-    const { error } = await sb.from('mediciones').update(cambios).eq('id_medicion', idMed);
-    if (error) { alert('No se pudo guardar: ' + error.message); botones.forEach((x) => { x.disabled = false; }); return; }
-    await refrescar(o.id_obra);
+    const card = btn.closest('.pend');
+    const error = await guardarDecision(idMed, estado, obs);
+    if (error) { alert('No se pudo guardar: ' + error); botones.forEach((x) => { x.disabled = false; }); return; }
+    card.classList.add(estado === 'Aprobada' ? 'sale-ok' : 'sale-obs');
+    toast(estado === 'Aprobada' ? `✓ ${idMed} aprobada` : `${idMed} observada: el inspector recibe el aviso`);
+    setTimeout(() => refrescar(o.id_obra), 420);
   }
+
+  // ---------- cambiar una decisión ya tomada ----------
+  async function dialogoDecision(o, m) {
+    const d = $('dlg-decision');
+    $('dec-tit').textContent = `Cambiar decisión — ${m.id_medicion}`;
+    const opciones = ESTADOS_MED.filter((e) => e !== m.estado_validacion);
+    $('dec-cuerpo').innerHTML = `
+      <p class="kpi-nota"><strong>${esc(m.item_descripcion)}</strong> · ${esc(m.periodo)} · ${Number(m.cantidad_periodo).toLocaleString('es-AR')} ${esc(m.unidad)} (${pesos(m.monto)})<br>
+        Estado actual: <b style="color:${COLOR_MED[m.estado_validacion]}">${esc(m.estado_validacion)}</b>${m.validado_por ? ' por ' + esc(st.usuarios[m.validado_por] || m.validado_por) : ''}.</p>
+      <div class="dec-opciones">${opciones.map((e, k) => `<label class="dec-op"><input type="radio" name="dec-estado" value="${e}" ${k === 0 ? 'checked' : ''}>
+        <span style="--c:${COLOR_MED[e]}">${{ Aprobada: '✓ Aprobar', Observada: '✎ Observar', Rechazada: '✕ Rechazar', Pendiente: '↺ Volver a pendiente' }[e]}</span></label>`).join('')}</div>
+      <label class="dec-motivo">Motivo del cambio <small>(lo ve el inspector; obligatorio para observar o rechazar)</small>
+        <textarea id="dec-motivo" rows="2" placeholder="Ej.: se revisaron las fotos de detalle, la medición es correcta"></textarea></label>
+      <p class="error" id="dec-error"></p>
+      <div class="historial" id="dec-historial"><p class="ayuda">Cargando historial…</p></div>`;
+    $('dec-acciones').innerHTML = '<button class="btn-f" id="dec-cancelar">Cancelar</button><button class="btn-f lleno" id="dec-guardar">Guardar cambio</button>';
+    $('dec-cancelar').addEventListener('click', () => d.close());
+    $('dec-guardar').addEventListener('click', async () => {
+      const estado = d.querySelector('[name=dec-estado]:checked').value;
+      const motivo = $('dec-motivo').value.trim();
+      if (['Observada', 'Rechazada'].includes(estado) && !motivo) { $('dec-error').textContent = 'Escribí el motivo para el inspector.'; return; }
+      $('dec-guardar').disabled = true; $('dec-guardar').textContent = 'Guardando…';
+      const error = await guardarDecision(m.id_medicion, estado, motivo || null);
+      if (error) { $('dec-error').textContent = error; $('dec-guardar').disabled = false; $('dec-guardar').textContent = 'Guardar cambio'; return; }
+      d.close(); toast(`Decisión de ${m.id_medicion} cambiada a ${estado}`);
+      await refrescar(o.id_obra);
+    });
+    if (!d.open) d.showModal();
+    const r = await sb.from('mediciones_historial').select('estado_anterior,estado_nuevo,actor,observacion,creado_en').eq('id_medicion', m.id_medicion).order('creado_en');
+    const hEl = $('dec-historial'); if (!hEl) return;
+    if (r.error) { hEl.innerHTML = '<p class="ayuda">El historial se activa al actualizar la base (script 05).</p>'; return; }
+    hEl.innerHTML = '<h4>Historial</h4><ol class="linea-tiempo">' + r.data.map((x) => `<li style="--c:${COLOR_MED[x.estado_nuevo] || 'var(--gris)'}">
+        <b>${esc(x.estado_anterior ? x.estado_anterior + ' → ' : '')}${esc(x.estado_nuevo)}</b> · ${esc(st.usuarios[x.actor] || x.actor || '—')}
+        <span>${new Date(x.creado_en).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+        ${x.observacion ? `<em>${esc(x.observacion)}</em>` : ''}</li>`).join('') + '</ol>';
+  }
+
+  // ---------- visor de foto con metadatos ----------
+  let mapaFoto = null;
+  async function verFoto(o, idFoto) {
+    const f = (st.fotosFicha || []).find((x) => x.id_foto === idFoto); if (!f) return;
+    const d = $('dlg-foto');
+    $('foto-img').src = f.url; $('foto-abrir').href = f.url;
+    $('foto-tit').textContent = `Foto ${f.id_foto}${f.id_medicion ? ' · ' + f.id_medicion : ''}`;
+    $('foto-datos').innerHTML = '<p class="ayuda">Cargando datos de captura…</p>';
+    if (!d.open) d.showModal();
+    // mapa chico: punto de la obra vs. punto de la foto
+    setTimeout(() => {
+      if (!mapaFoto) {
+        mapaFoto = L.map('foto-mapa', { zoomControl: false, attributionControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapaFoto);
+        mapaFoto.capa = L.layerGroup().addTo(mapaFoto);
+      }
+      mapaFoto.invalidateSize(); mapaFoto.capa.clearLayers();
+      const pts = [];
+      if (o.lat != null) { L.circleMarker([o.lat, o.lng], { radius: 8, color: '#fff', weight: 2, fillColor: '#1f4e79', fillOpacity: 1 }).bindTooltip('Obra', { permanent: true, direction: 'top', offset: [0, -6] }).addTo(mapaFoto.capa); pts.push([o.lat, o.lng]); }
+      if (f.lat != null) { L.circleMarker([f.lat, f.lng], { radius: 7, color: '#fff', weight: 2, fillColor: f.control_ubicacion === 'REVISAR' ? '#c0392b' : '#f2b705', fillOpacity: 1 }).bindTooltip('Foto', { permanent: true, direction: 'bottom', offset: [0, 6] }).addTo(mapaFoto.capa); pts.push([f.lat, f.lng]); }
+      if (pts.length === 2) L.polyline(pts, { color: '#f2b705', dashArray: '5 5', weight: 2 }).addTo(mapaFoto.capa);
+      $('foto-mapa').hidden = !pts.length;
+      if (pts.length === 2) mapaFoto.fitBounds(pts, { padding: [30, 30], maxZoom: 17 }); else if (pts.length) mapaFoto.setView(pts[0], 16);
+    }, 60);
+    const r = await sb.from('fotos').select('metadatos').eq('id_foto', idFoto).maybeSingle();
+    const md = r.error ? null : r.data?.metadatos;
+    const fila = (k, v) => v == null || v === '' ? '' : `<dt>${k}</dt><dd>${v}</dd>`;
+    const kb = (b) => b ? (b / 1024).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + ' KB' : null;
+    let h = '<dl class="meta">';
+    h += fila('Tomada', md?.captura ? `${esc(md.captura.local)} <small>(${esc(md.captura.utc)}, ${esc(md.captura.zona_horaria || '')})</small>` : esc(new Date(f.fecha_hora).toLocaleString('es-AR')));
+    if (md?.gps) h += fila('GPS', `<a href="https://www.openstreetmap.org/?mlat=${md.gps.lat}&mlon=${md.gps.lng}#map=18/${md.gps.lat}/${md.gps.lng}" target="_blank" rel="noopener">${md.gps.lat.toFixed(6)}, ${md.gps.lng.toFixed(6)}</a>${md.gps.precision_m != null ? ' ±' + md.gps.precision_m + ' m' : ''} <small>(${esc(md.gps.fuente || '')})</small>`)
+      + fila('Altitud', md.gps.altitud_m != null ? md.gps.altitud_m + ' m' : null);
+    else if (f.lat != null) h += fila('GPS', `${Number(f.lat).toFixed(6)}, ${Number(f.lng).toFixed(6)}`);
+    else h += fila('GPS', '<span style="color:var(--rojo)">Sin ubicación</span>');
+    h += fila('Distancia a la obra', f.distancia_obra_m != null ? `${Number(f.distancia_obra_m).toLocaleString('es-AR')} m ${f.control_ubicacion === 'REVISAR' ? '<b style="color:var(--rojo)">· REVISAR</b>' : '<b style="color:var(--verde)">· OK</b>'}` : null);
+    if (md) {
+      const dsp = md.dispositivo || {}, ex = md.exif || {}, ar = md.archivo_original || {}, ctl = md.controles || {};
+      h += fila('Inspector', esc(md.inspector?.nombre))
+        + fila('Ítem', md.item ? `${md.item.nro_item}. ${esc(md.item.descripcion)}` : null)
+        + fila('Equipo', esc(dsp.equipo || [ex.marca, ex.modelo].filter(Boolean).join(' ') || null))
+        + fila('Sistema', esc([dsp.plataforma, dsp.version_so].filter(Boolean).join(' ') || null))
+        + fila('Navegador', esc(dsp.navegador)) + fila('Red', esc(dsp.red)) + fila('Pantalla', esc(dsp.pantalla))
+        + fila('Fecha de la cámara', ex.fecha_toma ? esc(ex.fecha_toma.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$3/$2/$1')) + (ctl.foto_reciente === false ? ' <b style="color:var(--rojo)">· no es reciente</b>' : '') : null)
+        + fila('GPS cámara vs. celular', ctl.gps_camara_vs_navegador_m != null ? ctl.gps_camara_vs_navegador_m + ' m de diferencia' : null)
+        + fila('Cámara', [ex.iso && 'ISO ' + ex.iso, ex.exposicion && ex.exposicion + ' s', ex.apertura && 'f/' + Number(ex.apertura).toFixed(1)].filter(Boolean).join(' · ') || null)
+        + fila('Archivo original', ar.nombre ? `${esc(ar.nombre)} · ${ar.ancho}×${ar.alto} · ${kb(ar.tamano_bytes)}` : null)
+        + fila('Huella SHA-256', ar.sha256 ? `<code title="${esc(ar.sha256)}">${esc(ar.sha256.slice(0, 16))}…</code>` : null)
+        + fila('Versión de la app', esc(md.version));
+    }
+    h += '</dl>';
+    if (!md) h += `<p class="ayuda">${r.error ? 'Los datos completos de captura se guardan al actualizar la base (script 05).' : 'Esta foto se cargó antes de que existieran los metadatos.'}</p>`;
+    $('foto-datos').innerHTML = h;
+  }
+  $('foto-cerrar').addEventListener('click', () => $('dlg-foto').close());
+  $('dlg-foto').addEventListener('click', (e) => { if (e.target === $('dlg-foto')) $('dlg-foto').close(); });
+  $('dlg-decision').addEventListener('click', (e) => { if (e.target === $('dlg-decision')) $('dlg-decision').close(); });
 
   function cerrarFicha() {
     terminarEleccion(false); quitarMarcadorEdicion(); st.ed = null;
@@ -783,6 +965,80 @@
     await refrescar(o.id_obra);
   }
 
+  // ---------- celular: Mapa / Lista, filtros plegables, ficha deslizable ----------
+  function verVista(v) {
+    document.body.classList.toggle('ver-lista', v === 'lista');
+    $('nav-movil').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.vista === v));
+    if (v === 'mapa') setTimeout(() => mapa.invalidateSize(), 260);
+  }
+  $('nav-movil').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const v = b.dataset.vista;
+    if (v === 'nueva') { verVista('mapa'); abrirEditor(null); return; }
+    if (v === 'recorrido') { verVista('mapa'); if ($('banner-recorrido').hidden) iniciarRecorrido(); else terminarRecorrido(); return; }
+    verVista(v);
+  });
+  function contarFiltros() {
+    const n = ['f-tipo', 'f-estado', 'f-semaforo', 'f-barrio'].filter((id) => $(id).value).length;
+    $('n-filtros').textContent = n || '';
+    $('btn-filtros').classList.toggle('activos', n > 0);
+  }
+  $('btn-filtros').addEventListener('click', () => {
+    const abierto = $('filtros-mas').classList.toggle('abierto');
+    $('btn-filtros').setAttribute('aria-expanded', abierto);
+  });
+  ['f-tipo', 'f-estado', 'f-semaforo', 'f-barrio'].forEach((id) => $(id).addEventListener('input', contarFiltros));
+  $('leyenda').addEventListener('click', () => { if (esMovil()) $('leyenda').classList.toggle('abierta'); });
+
+  // Deslizar la ficha hacia abajo para cerrarla (celular)
+  (() => {
+    const f = $('ficha'); let y0 = null, dy = 0;
+    f.addEventListener('touchstart', (e) => {
+      if (!esMovil() || f.scrollTop > 0 || !e.target.closest('.manija, h2, .cod, .chips')) { y0 = null; return; }
+      y0 = e.touches[0].clientY; dy = 0; f.style.transition = 'none';
+    }, { passive: true });
+    f.addEventListener('touchmove', (e) => {
+      if (y0 == null) return;
+      dy = Math.max(0, e.touches[0].clientY - y0); f.style.transform = `translateY(${dy}px)`;
+    }, { passive: true });
+    f.addEventListener('touchend', () => {
+      if (y0 == null) return;
+      f.style.transition = ''; f.style.transform = '';
+      if (dy > 90) cerrarFicha();
+      y0 = null;
+    });
+  })();
+
+  // ---------- notificaciones (campana) ----------
+  N.escuchar(({ noLeidas, nuevas, disponible }) => {
+    const b = $('notif-badge');
+    b.textContent = noLeidas > 9 ? '9+' : noLeidas; b.hidden = !noLeidas;
+    $('btn-notif').hidden = !interno() || !disponible;
+    $('pn-todas').hidden = !noLeidas;
+    if (!$('panel-notif').hidden) pintarPanelNotif();
+    if (nuevas.length) {
+      toast(`🔔 ${nuevas[0].titulo}${nuevas.length > 1 ? ` (+${nuevas.length - 1} más)` : ''}`, 5000);
+      $('btn-notif').classList.add('timbre'); setTimeout(() => $('btn-notif').classList.remove('timbre'), 900);
+      // hay novedades: se actualizan datos e indicadores
+      const abierta = st.activa; cargar().then(() => { if (abierta && !st.ed) abrirFicha(abierta, false); });
+    }
+  });
+  function pintarPanelNotif() {
+    $('pn-lista').innerHTML = N.lista();
+    $('pn-lista').querySelectorAll('.notif').forEach((li) => li.addEventListener('click', () => {
+      N.marcar([Number(li.dataset.id)]);
+      $('panel-notif').hidden = true;
+      if (li.dataset.obra && st.obras.some((o) => o.id_obra === li.dataset.obra)) { verVista('mapa'); abrirFicha(li.dataset.obra, true); }
+    }));
+  }
+  $('btn-notif').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const p = $('panel-notif'); p.hidden = !p.hidden;
+    if (!p.hidden) { pintarPanelNotif(); N.cargar(); }
+  });
+  $('pn-todas').addEventListener('click', (e) => { e.stopPropagation(); N.marcarTodas(); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.notif-wrap')) $('panel-notif').hidden = true; });
+
   // ---------- sesión ----------
   async function actualizarSesion(session) {
     const enlace = (location.hash.match(/^#obra=([\w-]+)/) || [])[1];   // antes de cerrar fichas, que limpian el enlace
@@ -798,6 +1054,10 @@
     info.hidden = !session;
     $('btn-login').hidden = !!session;
     $('btn-logout').hidden = !session;
+    $('nav-nueva').hidden = !puedeGestionar();
+    $('panel-notif').hidden = true;
+    if (interno()) N.iniciar(sb, st.idUsuario); else N.detener();
+    st.kpisVistos = false;
     cerrarFicha();
     if (puedeGestionar()) await cargarCatalogos();
     if (session || enlace) mostrarApp();
@@ -835,3 +1095,6 @@
     setTimeout(() => actualizarSesion(session), 0);
   });
 })();
+
+// Instalable como app (manifest-tablero.json + sw.js)
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

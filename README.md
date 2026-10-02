@@ -36,18 +36,36 @@ La configuración (URL del proyecto y clave publicable de Supabase) está en `js
 ```
 index.html, js/, css/   visor web y tablero
 inspector.html          app del inspector (manifest.json + sw.js la hacen instalable)
+js/notificaciones.js    campana compartida · js/foto-sello.js  sello y metadatos de fotos
+manifest-tablero.json   permite instalar también el tablero en el celular
 sql/
   01_esquema.sql        tablas, restricciones y vistas calculadas (avance, desvío, semáforo…)
   02_datos_ejemplo.sql  datos del Excel modelo (16 obras, 68 ítems, 193 mediciones, 88 fotos, 31 certificados)
   03_seguridad.sql      roles y permisos (RLS) + bucket privado "fotos"
   04_usuarios_demo.sql  vincula logins de prueba con roles
+  05_notificaciones_y_auditoria.sql  notificaciones, historial, cambio de decisión, metadatos de fotos
 tools/
   excel_a_sql.py        regenera 02 a partir del Excel
 ```
 
 ## Instalar la base
 En Supabase > SQL Editor, pegar y correr en orden `01`, `02`, `03`. Después crear los logins de
-prueba y correr `04`. Para empezar de cero, volver a correr `01 → 02 → 03 → 04`.
+prueba y correr `04`, y por último `05` (notificaciones, historial y metadatos de fotos).
+Para empezar de cero, volver a correr `01 → 02 → 03 → 04 → 05`. El `05` se puede correr varias veces.
+
+## Notificaciones, decisiones y fotos (script 05)
+- **Notificaciones** generadas por la base: nueva medición, medición corregida, foto lejos de la obra
+  (a los validadores del área); decisión tomada o modificada, obra asignada, cambio de estado de obra (al inspector).
+  Campana con contador en el tablero y en la app del inspector (se actualiza cada 40 s y al volver a la pestaña).
+- **Cambiar una decisión**: el Secretario / Jefe de SSPP puede pasar una medición entre Aprobada, Observada,
+  Rechazada y Pendiente, con motivo; queda en el **historial**. No se puede si el certificado de ese mes ya está
+  Liquidado o Pagado (lo controla la base).
+- **El inspector corrige y reenvía** las mediciones observadas.
+- **Fotos selladas**: la app estampa sobre la foto obra, ítem, fecha/hora, GPS, distancia a la obra, inspector,
+  equipo y una huella; y guarda en `fotos.metadatos` (jsonb) el GPS completo, el dispositivo, el EXIF de la cámara
+  (marca, modelo, fecha de toma, GPS) y el SHA-256 del archivo original. El tablero lo muestra al tocar la foto.
+
+La web funciona igual sin el script 05: esas funciones simplemente no aparecen hasta correrlo.
 
 ## Modelo
 | Tabla | Qué guarda |
